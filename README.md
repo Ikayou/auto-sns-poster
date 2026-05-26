@@ -1,65 +1,71 @@
 # auto-sns-poster
 
-heise.de の最新テックニュースをもとに、毎日 TikTok 用のニュース動画下書きを作るプロジェクトです。
+Dieses Projekt erstellt automatisch TikTok-News-Drafts aus aktuellen heise.de-Meldungen.
 
-現在の運用は次の流れです。
+Der aktuelle Workflow:
 
-1. heise.de RSS からニュースを取得
-2. OpenAI API でドイツ語の短いニュース構成を作成
-3. HTML テンプレートから 7 枚の画像を生成
-4. 7 枚の画像を 1 本の MP4 動画に変換
-5. TikTok アプリの Inbox / 編集フローへ送信
-6. スマホの TikTok アプリで音楽と AI 生成ラベルを設定して投稿
+1. Aktuelle Tech-News per heise.de-RSS abrufen
+2. Mit der OpenAI API kurze deutsche News-Texte generieren
+3. Aus HTML-Templates sieben PNG-Slides rendern
+4. Die Slides zu einem MP4-Video zusammenfuegen
+5. Das Video in den TikTok-Inbox-/Bearbeitungsfluss hochladen
+6. Musik und KI-Label manuell in der TikTok-App setzen und posten
 
-直接公開はしません。TikTok アプリ側で最後に確認して投稿します。
+Das Projekt veroeffentlicht nicht direkt. Der letzte Schritt passiert bewusst in der TikTok-App.
 
-## 生成される内容
+## Ergebnis
 
-- `slide_01.png`: 表紙
-- `slide_02.png` から `slide_06.png`: heise.de から選んだ 5 件のニュース
-- `slide_07.png`: 終わりのページ
-- `carousel_video.mp4`: 7 枚をつなげた TikTok 用動画
+Bei jedem Lauf entstehen diese Dateien:
 
-画像内の文字はドイツ語です。
+```text
+output/carousel/slide_01.png   Cover
+output/carousel/slide_02.png   News 1
+output/carousel/slide_03.png   News 2
+output/carousel/slide_04.png   News 3
+output/carousel/slide_05.png   News 4
+output/carousel/slide_06.png   News 5
+output/carousel/slide_07.png   Outro
+output/carousel_video.mp4      fertiges TikTok-Video
+```
 
-## 主なファイル
+Alle sichtbaren Texte auf den Bildern sind auf Deutsch.
+
+## Projektstruktur
 
 ```text
 app/
-  create_carousel.py          heise.de取得、AI生成、PNGスライド作成
-  slides_to_video.py          PNGスライドをMP4動画へ変換
-  upload_to_tiktok_draft.py   TikTokのInbox編集フローへ動画を送信
-  print_tiktok_auth_url.py    TikTok認証URLを表示
-  get_token_direct.py         認証codeをaccess tokenへ交換
-  check_tiktok_info.py        tokenのTikTokアカウント確認
+  create_carousel.py          heise.de abrufen, KI-Inhalt erzeugen, PNG-Slides rendern
+  slides_to_video.py          PNG-Slides in ein MP4-Video umwandeln
+  upload_to_tiktok_draft.py   Video an den TikTok-Inbox-Flow senden
+  print_tiktok_auth_url.py    TikTok-OAuth-URL ausgeben
+  get_token_direct.py         OAuth-code in access token umwandeln
+  check_tiktok_info.py        pruefen, zu welchem TikTok-Konto der token gehoert
 
 templates/
-  heise_cover.html            表紙テンプレート
-  single_news.html            ニュース本文テンプレート
-  heise_outro.html            終わりのページテンプレート
+  heise_cover.html            Cover-Template
+  single_news.html            Template fuer einzelne News-Slides
+  heise_outro.html            Outro-Template
 
 assets/
-  carousel_content.json       AIが作った投稿内容
+  carousel_content.json       generierter Inhalt fuer Caption und Slides
 
 output/
-  carousel/                   生成されたPNGスライド
-  carousel_video.mp4          生成された動画
+  carousel/                   generierte PNG-Slides
+  carousel_video.mp4          generiertes Video
 ```
 
-## セットアップ
-
-Python 環境で依存関係を入れます。
+## Installation
 
 ```bash
 pip install -r requirements.txt
 playwright install chromium
 ```
 
-GitHub Actions でも使うため、GitHub Secrets にも同じキーを入れてください。
+Fuer GitHub Actions werden die gleichen Zugangsdaten als GitHub Secrets benoetigt.
 
-## .env
+## Lokale .env
 
-ローカル実行では `.env` が必要です。
+Fuer lokale Tests wird eine `.env` im Projektordner verwendet.
 
 ```env
 OPENAI_API_KEY=sk-...
@@ -77,39 +83,39 @@ NEWS_COUNT=5
 SECONDS_PER_SLIDE=8.0
 ```
 
-注意: `TIKTOK_ACCOUNT_NAME` は画像内に表示する名前です。実際にどのTikTokアカウントへ下書きが届くかは `TIKTOK_ACCESS_TOKEN` の持ち主で決まります。
+Wichtig: `TIKTOK_ACCOUNT_NAME` ist nur der Name, der auf den Slides angezeigt wird. An welches TikTok-Konto der Draft wirklich gesendet wird, entscheidet der `TIKTOK_ACCESS_TOKEN`.
 
-## TikTok認証
+## TikTok-Authentifizierung
 
-TikTok下書きを `german.news69` に送りたい場合は、ブラウザで普通のTikTokアカウント `german.news69` にログインした状態で認証します。
+Wenn Drafts an `german.news69` gehen sollen, muss die OAuth-Freigabe im normalen TikTok-Konto `german.news69` erfolgen.
+
+1. Im Browser bei TikTok als `german.news69` einloggen.
+2. Die Auth-URL ausgeben:
 
 ```bash
 python app/print_tiktok_auth_url.py
 ```
 
-表示されたURLを開いて許可します。戻ってきたURLに `code=...` が付くので、その値を `.env` の `CODE=` に入れます。
-
-そのあとすぐに実行します。
+3. Die angezeigte URL oeffnen und die Berechtigungen erlauben.
+4. Nach der Weiterleitung den Wert aus `code=...` in `.env` als `CODE=...` speichern.
+5. Den code sofort in einen token umwandeln:
 
 ```bash
 python app/get_token_direct.py
 ```
 
-表示された access token を `.env` の `TIKTOK_ACCESS_TOKEN=` に入れます。
-
-確認します。
+6. Den ausgegebenen access token in `.env` als `TIKTOK_ACCESS_TOKEN=...` speichern.
+7. Das verknuepfte Konto pruefen:
 
 ```bash
 python app/check_tiktok_info.py
 ```
 
-`creator_username` が `german.news69` なら、そのアカウントに下書きが届きます。
+Wenn `creator_username` `german.news69` ist, landet der Draft beim richtigen Konto.
 
-GitHub Actions で毎朝動かす場合は、GitHub Secrets の `TIKTOK_ACCESS_TOKEN` も新しい token に更新してください。
+## Manueller Lauf
 
-## 手動実行
-
-ローカルで1回作るときはこの順番です。
+Einen kompletten lokalen Lauf startest du so:
 
 ```bash
 python app/create_carousel.py
@@ -117,25 +123,30 @@ python app/slides_to_video.py
 python app/upload_to_tiktok_draft.py
 ```
 
-成功すると TikTok アプリに通知が届きます。スマホで TikTok を開き、Inbox から動画を編集して、音楽を選び、AI生成ラベルをオンにして投稿します。
+Danach die TikTok-App oeffnen, die Inbox-Benachrichtigung auswaehlen, Musik hinzufuegen, das KI-generiert-Label aktivieren und den Beitrag posten.
 
-## 自動実行
+## Automatischer Lauf mit GitHub Actions
 
-`.github/workflows/daily_post.yml` で毎日実行します。
-
-現在のスケジュール:
+Der Workflow liegt hier:
 
 ```text
-05:00 UTC
+.github/workflows/daily_post.yml
 ```
 
-ドイツ夏時間では朝 7:00、冬時間では朝 6:00 です。
+Zielzeiten in Deutschland:
 
-GitHub の Actions 画面から `workflow_dispatch` で手動実行もできます。
+```text
+08:30 Europe/Berlin
+17:00 Europe/Berlin
+```
+
+GitHub Actions verwendet UTC. Deshalb startet der Workflow zu mehreren UTC-Zeiten und prueft im Job selbst, ob die aktuelle Zeit in `Europe/Berlin` wirklich `08:30` oder `17:00` ist. So funktioniert der Zeitplan auch mit Sommerzeit und Winterzeit.
+
+Manuell kann der Workflow weiterhin ueber `workflow_dispatch` in GitHub Actions gestartet werden.
 
 ## GitHub Secrets
 
-GitHub Actions には最低限これを設定します。
+Diese Secrets muessen im Repository gesetzt sein:
 
 ```text
 OPENAI_API_KEY
@@ -143,54 +154,55 @@ TIKTOK_ACCESS_TOKEN
 TIKTOK_ACCOUNT_NAME
 ```
 
-`TIKTOK_ACCOUNT_NAME` は `german.news69` にしてください。
+`TIKTOK_ACCOUNT_NAME` sollte aktuell so gesetzt sein:
 
-## 現在のTikTok投稿方式
+```text
+german.news69
+```
 
-現在は動画ファイルを `FILE_UPLOAD` で TikTok に送る方式です。
+Die lokale `.env` wird von GitHub Actions nicht gelesen. Werte, die im automatischen Workflow gebraucht werden, muessen einzeln als GitHub Secret eingetragen werden.
 
-この方式では GitHub Pages の画像URL認証は使いません。写真カルーセルをURLから読み込ませる方式では URL ownership verification が必要ですが、申請が通るまでは通常運用では使いません。
+## Hinweise zu TikTok
 
-## 出力ファイル
+- Der aktuelle Upload nutzt `FILE_UPLOAD` fuer ein MP4-Video.
+- Es wird kein Foto-Karussell direkt gepostet.
+- Musik kann nicht per API aus der TikTok-Musikbibliothek ausgewaehlt werden.
+- Das KI-generiert-Label wird manuell in der TikTok-App aktiviert.
+- Wenn Drafts beim falschen Konto ankommen, wurde der token mit dem falschen TikTok-Konto erstellt.
 
-生成物は Git 管理しません。
+## Nicht versionierte Dateien
+
+Generierte Dateien werden nicht ins Git-Repository aufgenommen:
 
 ```text
 assets/*
 output/*
 ```
 
-ただし `.gitkeep` は残します。
+`.env` darf ebenfalls nie committet werden.
 
-## よく使う確認コマンド
+## Nuetzliche Befehle
+
+TikTok-Konto des tokens pruefen:
 
 ```bash
 python app/check_tiktok_info.py
 ```
 
-TikTok token がどのアカウントに紐づいているか確認します。
+Slides neu erzeugen:
 
 ```bash
 python app/create_carousel.py
 ```
 
-heise.de からニュースを取り、7枚の画像を作ります。
+Video aus Slides erzeugen:
 
 ```bash
 python app/slides_to_video.py
 ```
 
-画像を1本の動画にします。
+Video an TikTok-Draft-Flow senden:
 
 ```bash
 python app/upload_to_tiktok_draft.py
 ```
-
-動画をTikTokアプリの編集フローへ送ります。
-
-## 注意
-
-- `.env` は絶対に Git に入れないでください。
-- `CODE` は一度しか使えません。期限も短いので、認証後すぐに `get_token_direct.py` を実行してください。
-- TikTokで音楽を選ぶことと、AI生成ラベルをオンにすることは、スマホアプリ側で手動で行います。
-- 下書きが違うアカウントへ届く場合は、token を作ったときにログインしていたTikTokアカウントが違います。
