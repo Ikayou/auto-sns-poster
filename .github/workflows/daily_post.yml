@@ -2,47 +2,65 @@ name: Daily TikTok Draft Upload
 
 on:
   schedule:
-    # 毎日ドイツ時間 朝7時 (UTC 朝5時) に定期実行
-    - cron: '0 5 * * *'
-  workflow_dispatch: # GitHubの画面から好きな時に「手動テスト実行」できるボタン
+    # GitHub Actions cron runs in UTC.
+    # These four UTC times cover 08:30 and 17:00 in Europe/Berlin
+    # across both summer time (CEST) and winter time (CET).
+    - cron: '30 6 * * *'
+    - cron: '30 7 * * *'
+    - cron: '0 15 * * *'
+    - cron: '0 16 * * *'
+  workflow_dispatch:
 
 jobs:
   upload-draft-video:
-    runs-on: ubuntu-latest # GitHubが用意する最新のLinuxサーバーを使用
+    runs-on: ubuntu-latest
 
     steps:
-    - name: 📂 リポジトリのコードを取得
+    - name: Check Berlin schedule
+      id: schedule_check
+      run: |
+        berlin_time="$(TZ=Europe/Berlin date +'%H:%M')"
+        echo "Berlin time: ${berlin_time}"
+
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "run_job=true" >> "$GITHUB_OUTPUT"
+        elif [ "$berlin_time" = "08:30" ] || [ "$berlin_time" = "17:00" ]; then
+          echo "run_job=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "run_job=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Checkout repository
+      if: steps.schedule_check.outputs.run_job == 'true'
       uses: actions/checkout@v4
 
-    - name: 🐍 Pythonのセットアップ
+    - name: Set up Python
+      if: steps.schedule_check.outputs.run_job == 'true'
       uses: actions/setup-python@v5
       with:
-        python-version: '3.12' # ご自身の環境に合わせる
+        python-version: '3.12'
 
-    - name: 🛠️ システム依存関係のインストール (ImageMagick & 日本語フォント)
+    - name: Install system dependencies
+      if: steps.schedule_check.outputs.run_job == 'true'
       run: |
         sudo apt-get update
         sudo apt-get install -y imagemagick fonts-noto-cjk
-        # ImageMagickのセキュリティ制限を解除
         sudo sed -i 's/<policy domain="path" rights="none" pattern="@\*"//' /etc/ImageMagick-*/policy.xml
 
-    - name: 📦 Pythonライブラリのインストール
+    - name: Install Python dependencies
+      if: steps.schedule_check.outputs.run_job == 'true'
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         playwright install chromium
 
-    - name: 🚀 カルーセル動画を生成してTikTok下書きへ送信
-      env: # GitHubの金庫から鍵を取り出して、環境変数としてセットする
+    - name: Create video and send to TikTok draft flow
+      if: steps.schedule_check.outputs.run_job == 'true'
+      env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
         TIKTOK_ACCOUNT_NAME: ${{ secrets.TIKTOK_ACCOUNT_NAME }}
       run: |
-        # 1. heise.deニュース取得 → AI生成 → PlaywrightでスライドPNG生成
         python app/create_carousel.py
-
-        # 2. スライドPNGを1本のMP4へ変換
         python app/slides_to_video.py
-
-        # 3. TikTokアプリのInboxへ送信（アプリで音楽を選んで投稿）
         python app/upload_to_tiktok_draft.py
