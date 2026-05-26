@@ -1,135 +1,196 @@
 # auto-sns-poster
 
-Automatische tägliche Generierung und Veröffentlichung von Kurzvideos und Karussell-Beiträgen für TikTok.
+heise.de の最新テックニュースをもとに、毎日 TikTok 用のニュース動画下書きを作るプロジェクトです。
 
-## Übersicht
+現在の運用は次の流れです。
 
-Dieses Projekt sammelt täglich aktuelle Nachrichtenartikel über RSS-Feeds, erstellt mithilfe der OpenAI API ansprechende Inhalte und veröffentlicht diese automatisch als Foto-Karussell auf TikTok. Die Slide-Bilder werden mit Canva erstellt und über GitHub Pages gehostet.
+1. heise.de RSS からニュースを取得
+2. OpenAI API でドイツ語の短いニュース構成を作成
+3. HTML テンプレートから 7 枚の画像を生成
+4. 7 枚の画像を 1 本の MP4 動画に変換
+5. TikTok アプリの Inbox / 編集フローへ送信
+6. スマホの TikTok アプリで音楽と AI 生成ラベルを設定して投稿
 
-## Projektstruktur
+直接公開はしません。TikTok アプリ側で最後に確認して投稿します。
 
-```
+## 生成される内容
+
+- `slide_01.png`: 表紙
+- `slide_02.png` から `slide_06.png`: heise.de から選んだ 5 件のニュース
+- `slide_07.png`: 終わりのページ
+- `carousel_video.mp4`: 7 枚をつなげた TikTok 用動画
+
+画像内の文字はドイツ語です。
+
+## 主なファイル
+
+```text
 app/
-  create_canva_carousel.py   # Schritt 1: RSS → KI-Inhalt → JSON speichern
-  canva_auth.py              # Canva Connect API OAuth-Authentifizierung
-  create_carousel.py         # Alternativ: HTML-Vorlagen → PNG (Playwright)
-  post_tiktok_carousel.py    # TikTok-Veröffentlichung (GitHub Pages → TikTok API)
-  fetch_content.py           # RSS-Feeds abrufen
-  create_video.py            # Klassische Video-Pipeline (MP4)
-  post_to_sns.py             # Instagram Reels Veröffentlichung
-  get_token_direct.py        # TikTok OAuth-Token abrufen
-  run_daily.py               # Täglicher Scheduler (07:00 Uhr)
+  create_carousel.py          heise.de取得、AI生成、PNGスライド作成
+  slides_to_video.py          PNGスライドをMP4動画へ変換
+  upload_to_tiktok_draft.py   TikTokのInbox編集フローへ動画を送信
+  print_tiktok_auth_url.py    TikTok認証URLを表示
+  get_token_direct.py         認証codeをaccess tokenへ交換
+  check_tiktok_info.py        tokenのTikTokアカウント確認
+
 templates/
-  slide_title.html           # Titelfolie
-  slide_content.html         # Inhaltsfolien
-  slide_cta.html             # Abschlussfolie (Call to Action)
+  heise_cover.html            表紙テンプレート
+  single_news.html            ニュース本文テンプレート
+  heise_outro.html            終わりのページテンプレート
+
 assets/
-  NotoSansJP-Bold.ttf        # Japanische Schriftart für Untertitel
+  carousel_content.json       AIが作った投稿内容
+
 output/
-  carousel/                  # Erzeugte Slide-PNGs
+  carousel/                   生成されたPNGスライド
+  carousel_video.mp4          生成された動画
 ```
 
-## Täglicher Arbeitsablauf
+## セットアップ
 
-### Schritt 1 — Nachrichtenartikel abrufen & KI-Inhalt generieren
+Python 環境で依存関係を入れます。
 
-```powershell
-python app/create_canva_carousel.py
-```
-
-Ruft RSS-Feeds ab, wählt den viralsten Artikel aus und speichert die Slide-Struktur unter `assets/carousel_content.json`.
-
-### Schritt 2 — Slides in Canva erstellen
-
-In Claude Code eingeben:
-
-```
-/make-canva-slides
-```
-
-Erstellt automatisch alle Slides mit den Canva-Vorlagen und speichert die PNGs unter `output/carousel/`.
-
-### Schritt 3 — Auf TikTok veröffentlichen
-
-```powershell
-python app/post_tiktok_carousel.py
-```
-
-Lädt die PNGs auf GitHub Pages hoch und veröffentlicht das Karussell über die TikTok Content Posting API.
-
-## Einrichtung
-
-### Voraussetzungen
-
-- Python 3.12+
-- Git
-- Ein GitHub-Repository mit aktivierten GitHub Pages
-- OpenAI API-Schlüssel
-- TikTok Developer-App mit `video.upload`-Berechtigung
-- Canva-Konto (für Canva MCP in Claude Code)
-
-### Installation
-
-```powershell
+```bash
 pip install -r requirements.txt
 playwright install chromium
 ```
 
-### Umgebungsvariablen (`.env`)
+GitHub Actions でも使うため、GitHub Secrets にも同じキーを入れてください。
 
-Erstelle eine `.env`-Datei im Projektverzeichnis:
+## .env
+
+ローカル実行では `.env` が必要です。
 
 ```env
-# OpenAI
 OPENAI_API_KEY=sk-...
 
-# TikTok
-TIKTOK_ACCESS_TOKEN=act....
 CLIENT_KEY=...
 CLIENT_SECRET=...
+CODE=...
+TIKTOK_ACCESS_TOKEN=...
 
-# GitHub Pages (Bild-Hosting für TikTok)
-GITHUB_SLIDES_DIR=/pfad/zum/lokalen/tiktok-slides-repo
-GITHUB_PAGES_BASE_URL=https://dein-benutzername.github.io/tiktok-slides
+TIKTOK_ACCOUNT_NAME=german.news69
+TIKTOK_REDIRECT_URI=https://ikayou.github.io/tiktok-api-legal/
+TIKTOK_SCOPES=user.info.basic,video.upload,video.publish
 
-# TikTok-Kontoname (für CTA-Folie)
-TIKTOK_ACCOUNT_NAME=dein_tiktok
+NEWS_COUNT=5
+SECONDS_PER_SLIDE=8.0
 ```
 
-### GitHub Pages einrichten (einmalig)
+注意: `TIKTOK_ACCOUNT_NAME` は画像内に表示する名前です。実際にどのTikTokアカウントへ下書きが届くかは `TIKTOK_ACCESS_TOKEN` の持ち主で決まります。
 
-1. Repository erstellen (z. B. `dein-benutzername/tiktok-slides`) und GitHub Pages aktivieren
-2. Repository lokal klonen:
-   ```bash
-   git clone https://github.com/dein-benutzername/tiktok-slides ~/tiktok-slides
-   ```
-3. Im TikTok Developer Portal unter **URL properties** den Prefix `https://dein-benutzername.github.io/tiktok-slides/` registrieren und verifizieren
+## TikTok認証
 
-### Canva-Vorlagen einrichten (einmalig)
+TikTok下書きを `german.news69` に送りたい場合は、ブラウザで普通のTikTokアカウント `german.news69` にログインした状態で認証します。
 
-Drei Vorlagen wurden bereits erstellt und sind in Claude Code verfügbar:
-
-| Folie | Design-ID |
-|-------|-----------|
-| Titelfolie | `DAHKwLcEEmA` |
-| Inhaltsfolie | `DAHKwGZP6uw` |
-| CTA-Folie | `DAHKwHaO_so` |
-
-## Abhängigkeiten
-
-```
-openai        # KI-Generierung (Text, Bild, Audio)
-moviepy       # Videozusammenstellung
-pillow        # Bildbearbeitung
-python-dotenv
-requests
-feedparser    # RSS-Abruf
-playwright    # HTML → PNG (Fallback)
+```bash
+python app/print_tiktok_auth_url.py
 ```
 
-## Hinweise
+表示されたURLを開いて許可します。戻ってきたURLに `code=...` が付くので、その値を `.env` の `CODE=` に入れます。
 
-- `.env` **niemals** in Git einchecken — alle Geheimnisse bleiben lokal
-- `assets/` und `output/` sind in `.gitignore` eingetragen
-- TikTok Access Token läuft ab — regelmäßig mit `get_token_direct.py` erneuern
-- Für den automatischen Tagesbetrieb `run_daily.py` als Dienst einrichten
+そのあとすぐに実行します。
+
+```bash
+python app/get_token_direct.py
+```
+
+表示された access token を `.env` の `TIKTOK_ACCESS_TOKEN=` に入れます。
+
+確認します。
+
+```bash
+python app/check_tiktok_info.py
+```
+
+`creator_username` が `german.news69` なら、そのアカウントに下書きが届きます。
+
+GitHub Actions で毎朝動かす場合は、GitHub Secrets の `TIKTOK_ACCESS_TOKEN` も新しい token に更新してください。
+
+## 手動実行
+
+ローカルで1回作るときはこの順番です。
+
+```bash
+python app/create_carousel.py
+python app/slides_to_video.py
+python app/upload_to_tiktok_draft.py
+```
+
+成功すると TikTok アプリに通知が届きます。スマホで TikTok を開き、Inbox から動画を編集して、音楽を選び、AI生成ラベルをオンにして投稿します。
+
+## 自動実行
+
+`.github/workflows/daily_post.yml` で毎日実行します。
+
+現在のスケジュール:
+
+```text
+05:00 UTC
+```
+
+ドイツ夏時間では朝 7:00、冬時間では朝 6:00 です。
+
+GitHub の Actions 画面から `workflow_dispatch` で手動実行もできます。
+
+## GitHub Secrets
+
+GitHub Actions には最低限これを設定します。
+
+```text
+OPENAI_API_KEY
+TIKTOK_ACCESS_TOKEN
+TIKTOK_ACCOUNT_NAME
+```
+
+`TIKTOK_ACCOUNT_NAME` は `german.news69` にしてください。
+
+## 現在のTikTok投稿方式
+
+現在は動画ファイルを `FILE_UPLOAD` で TikTok に送る方式です。
+
+この方式では GitHub Pages の画像URL認証は使いません。写真カルーセルをURLから読み込ませる方式では URL ownership verification が必要ですが、申請が通るまでは通常運用では使いません。
+
+## 出力ファイル
+
+生成物は Git 管理しません。
+
+```text
+assets/*
+output/*
+```
+
+ただし `.gitkeep` は残します。
+
+## よく使う確認コマンド
+
+```bash
+python app/check_tiktok_info.py
+```
+
+TikTok token がどのアカウントに紐づいているか確認します。
+
+```bash
+python app/create_carousel.py
+```
+
+heise.de からニュースを取り、7枚の画像を作ります。
+
+```bash
+python app/slides_to_video.py
+```
+
+画像を1本の動画にします。
+
+```bash
+python app/upload_to_tiktok_draft.py
+```
+
+動画をTikTokアプリの編集フローへ送ります。
+
+## 注意
+
+- `.env` は絶対に Git に入れないでください。
+- `CODE` は一度しか使えません。期限も短いので、認証後すぐに `get_token_direct.py` を実行してください。
+- TikTokで音楽を選ぶことと、AI生成ラベルをオンにすることは、スマホアプリ側で手動で行います。
+- 下書きが違うアカウントへ届く場合は、token を作ったときにログインしていたTikTokアカウントが違います。
