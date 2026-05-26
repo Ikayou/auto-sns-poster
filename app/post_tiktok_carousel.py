@@ -39,9 +39,12 @@ ACCESS_TOKEN     = os.getenv("TIKTOK_ACCESS_TOKEN", "")
 SLIDES_DIR       = os.getenv("GITHUB_SLIDES_DIR", "")       # GitHub Pages リポジトリのローカルパス
 PAGES_BASE_URL   = os.getenv("GITHUB_PAGES_BASE_URL", "")   # https://user.github.io/repo
 BASE_URL         = "https://open.tiktokapis.com/v2"
-PRIVACY_LEVEL    = "SELF_ONLY"   # 本番: PUBLIC_TO_EVERYONE
+POST_MODE        = "DIRECT_POST"
+PRIVACY_LEVEL    = "SELF_ONLY"   # TikTok の「自分のみ」投稿
 
 PAGES_DEPLOY_WAIT = 90   # GitHub Pages デプロイ待機秒数
+PHOTO_TITLE_LIMIT = 90
+PHOTO_DESCRIPTION_LIMIT = 4000
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +67,20 @@ def push_to_github_pages(image_paths: list[Path]) -> list[str]:
     dest_dir = Path(SLIDES_DIR)
     dest_dir.mkdir(parents=True, exist_ok=True)
 
+    # git pull → copy images → add → commit → push
+    def run_git(args: list[str], allow_fail_msgs: list[str] = []) -> subprocess.CompletedProcess:
+        cmd = ["git", "-C", str(dest_dir)] + args
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            combined = result.stdout + result.stderr
+            if any(msg in combined for msg in allow_fail_msgs):
+                return result
+            raise RuntimeError(f"git コマンド失敗: {' '.join(cmd)}\n{result.stderr}")
+        return result
+
+    run_git(["pull", "--rebase", "origin", "main"],
+            allow_fail_msgs=["There is no tracking information", "no tracking information"])
+
     filenames = []
     for img_path in image_paths:
         dest = dest_dir / img_path.name
@@ -71,19 +88,10 @@ def push_to_github_pages(image_paths: list[Path]) -> list[str]:
         filenames.append(img_path.name)
         print(f"  📋 {img_path.name} → {dest}")
 
-    # git add / commit / push
-    for cmd in [
-        ["git", "-C", str(dest_dir), "add", "."],
-        ["git", "-C", str(dest_dir), "commit", "-m", "update slides"],
-        ["git", "-C", str(dest_dir), "push"],
-    ]:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            # "nothing to commit" は正常
-            if "nothing to commit" in result.stdout + result.stderr:
-                print(f"  ℹ️  変更なし（既に同じファイル）")
-            else:
-                raise RuntimeError(f"git コマンド失敗: {' '.join(cmd)}\n{result.stderr}")
+    run_git(["add", "."])
+    run_git(["commit", "-m", "update slides"],
+            allow_fail_msgs=["nothing to commit"])
+    run_git(["push", "origin", "main"])
 
     print(f"  ✅ GitHub に push しました")
     print(f"  ⏳ GitHub Pages のデプロイ待機中（{PAGES_DEPLOY_WAIT}秒）...")
@@ -104,10 +112,13 @@ def push_to_github_pages(image_paths: list[Path]) -> list[str]:
 def create_photo_post(photo_urls: list[str], caption: str, hashtags: list[str]) -> str:
     """TikTok にフォトカルーセルを投稿して publish_id を返す"""
     full_caption = caption + "\n\n" + " ".join(hashtags)
+    title = caption[:PHOTO_TITLE_LIMIT] or "auto-sns-poster"
+    description = full_caption[:PHOTO_DESCRIPTION_LIMIT]
 
     payload = {
         "post_info": {
-            "title":           full_caption[:2200],
+            "title":           title,
+            "description":     description,
             "privacy_level":   PRIVACY_LEVEL,
             "disable_comment": False,
         },
@@ -117,9 +128,10 @@ def create_photo_post(photo_urls: list[str], caption: str, hashtags: list[str]) 
             "photo_cover_index": 0,
         },
         "media_type": "PHOTO",
-        "post_mode":  "DIRECT_POST",
+        "post_mode":  POST_MODE,
     }
 
+    print(f"   投稿モード: {POST_MODE} / 公開範囲: {PRIVACY_LEVEL}")
     print(f"   送信ペイロード: {json.dumps(payload, ensure_ascii=False, indent=2)}")
 
     resp = requests.post(
@@ -184,7 +196,7 @@ def post_carousel(image_paths: list[Path], caption: str, hashtags: list[str]) ->
     print(f"   最終ステータス: {status}")
 
     if status == "PUBLISH_COMPLETE":
-        print(f"\n🎉 TikTokへの投稿が完了しました！ publish_id: {publish_id}")
+        print(f"\n🎉 TikTokへの非公開投稿が完了しました！ publish_id: {publish_id}")
     else:
         print(f"\n⚠️  ステータス: {status}（TikTokアプリで確認してください）")
 

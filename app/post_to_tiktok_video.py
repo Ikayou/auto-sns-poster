@@ -23,6 +23,7 @@ load_dotenv()
 ACCESS_TOKEN  = os.getenv("TIKTOK_ACCESS_TOKEN", "")
 BASE_URL      = "https://open.tiktokapis.com/v2"
 PRIVACY_LEVEL = "SELF_ONLY"   # テスト中は SELF_ONLY、本番は FOLLOWER_OF_CREATOR
+IS_AIGC       = os.getenv("TIKTOK_IS_AIGC", "true").lower() in ("1", "true", "yes", "on")
 
 MIN_CHUNK  = 5  * 1024 * 1024  # 5MB  (TikTok下限)
 MAX_CHUNK  = 64 * 1024 * 1024  # 64MB (TikTok上限)
@@ -54,6 +55,7 @@ def init_video_upload(video_path: Path, caption: str, hashtags: list[str]) -> di
             "title":           full_caption[:2200],
             "privacy_level":   PRIVACY_LEVEL,
             "disable_comment": False,
+            "is_aigc":         IS_AIGC,
         },
         "source_info": {
             "source":            "FILE_UPLOAD",

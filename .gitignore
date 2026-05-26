@@ -1,6 +1,7 @@
 # 環境変数ファイル（超重要）
 .env
 venv/
+auto-sns-poster/
 # Pythonのキャッシュファイル
 __pycache__/
 *.pyc

@@ -23,7 +23,7 @@ CAROUSEL_DIR = ROOT_DIR / "output" / "carousel"
 OUTPUT_PATH  = ROOT_DIR / "output" / "carousel_video.mp4"
 
 # 1枚あたりの表示秒数（合計 = スライド枚数 × この値）
-SECONDS_PER_SLIDE = 3.5
+SECONDS_PER_SLIDE = float(os.getenv("SECONDS_PER_SLIDE", "8.0"))
 
 
 def slides_to_video(
@@ -68,4 +68,4 @@ def slides_to_video(
 
 if __name__ == "__main__":
     result = slides_to_video(audio_path=None)
-    print(f"\n次のステップ: python app/post_to_tiktok_video.py")
+    print(f"\n次のステップ: python app/upload_to_tiktok_draft.py")

@@ -1,40 +1,56 @@
 import os
+from urllib.parse import unquote
+
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
-CLIENT_KEY = os.getenv("CLIENT_KEY")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-CODE = os.getenv("CODE")
 
-def exchange_user_token():
-    url = "https://open.tiktokapis.com/v2/oauth/token/"
-    
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-    
-    # 投稿用トークンをもらうための正しい設定
-    data = {
-        "client_key": CLIENT_KEY,
-        "client_secret": CLIENT_SECRET,
-        "code": CODE,
-        "grant_type": "authorization_code",
-        "redirect_uri": "https://www.example.com/"
-    }
-    
-    print("🔄 動画投稿用の「本物のユーザートークン」に最終変換中...")
-    response = requests.post(url, headers=headers, data=data)
-    res_data = response.json()
-    
-    if "access_token" in res_data:
-        token = res_data["access_token"]
-        print("\n🎉 大成功！！！トークンを取得できました：")
-        print(f"----------------------------------------\n{token}\n----------------------------------------")
-        print("\n上記の文字列を丸ごとコピーして、.envの TIKTOK_ACCESS_TOKEN= に上書き貼り付けしてください。")
-    else:
-        print("\n❌ エラーが発生しました。")
-        print(f"レスポンス内容: {res_data}")
+load_dotenv()
+
+CLIENT_KEY = os.getenv("CLIENT_KEY") or os.getenv("TIKTOK_CLIENT_KEY")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET") or os.getenv("TIKTOK_CLIENT_SECRET")
+CODE = os.getenv("CODE")
+REDIRECT_URI = os.getenv("TIKTOK_REDIRECT_URI", "https://ikayou.github.io/tiktok-api-legal/")
+
+
+def require_env(name: str, value: str | None) -> str:
+    if not value:
+        raise SystemExit(f"{name} is missing in .env")
+    return value
+
+
+def exchange_user_token() -> None:
+    client_key = require_env("CLIENT_KEY", CLIENT_KEY)
+    client_secret = require_env("CLIENT_SECRET", CLIENT_SECRET)
+    code = require_env("CODE", CODE)
+
+    response = requests.post(
+        "https://open.tiktokapis.com/v2/oauth/token/",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        data={
+            "client_key": client_key,
+            "client_secret": client_secret,
+            "code": unquote(code),
+            "grant_type": "authorization_code",
+            "redirect_uri": REDIRECT_URI,
+        },
+        timeout=30,
+    )
+
+    try:
+        data = response.json()
+    except ValueError:
+        raise SystemExit(f"TikTok token response was not JSON: {response.text}")
+
+    if response.status_code != 200 or "access_token" not in data:
+        raise SystemExit(f"TikTok token error {response.status_code}: {data}")
+
+    print("Access token:")
+    print(data["access_token"])
+    print()
+    print("Paste this value into .env as TIKTOK_ACCESS_TOKEN=...")
+    print("Then run: python app/check_tiktok_info.py")
+
 
 if __name__ == "__main__":
     exchange_user_token()

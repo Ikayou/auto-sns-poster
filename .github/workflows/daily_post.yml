@@ -1,4 +1,4 @@
-name: Daily TikTok Post
+name: Daily TikTok Draft Upload
 
 on:
   schedule:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch: # GitHubの画面から好きな時に「手動テスト実行」できるボタン
 
 jobs:
-  post-video:
+  upload-draft-video:
     runs-on: ubuntu-latest # GitHubが用意する最新のLinuxサーバーを使用
 
     steps:
@@ -30,17 +30,19 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        playwright install chromium
 
-    - name: 🚀 自動生成＆投稿スクリプトの実行
+    - name: 🚀 カルーセル動画を生成してTikTok下書きへ送信
       env: # GitHubの金庫から鍵を取り出して、環境変数としてセットする
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        CLIENT_KEY: ${{ secrets.CLIENT_KEY }}
-        CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
         TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
-        CODE: ${{ secrets.CODE }}
+        TIKTOK_ACCOUNT_NAME: ${{ secrets.TIKTOK_ACCOUNT_NAME }}
       run: |
-        # 1. ニュースを取得して動画を生成
-        python app/create_news_video.py
-        
-        # 2. 完成した動画を引数で指定して投稿スクリプトに渡す
-        python app/post_to_tiktok.py tiktok_news.mp4 "ドイツの最新テックニュースをお届け！🇩🇪🤖 #IT #エンジニア #ニュース"
+        # 1. heise.deニュース取得 → AI生成 → PlaywrightでスライドPNG生成
+        python app/create_carousel.py
+
+        # 2. スライドPNGを1本のMP4へ変換
+        python app/slides_to_video.py
+
+        # 3. TikTokアプリのInboxへ送信（アプリで音楽を選んで投稿）
+        python app/upload_to_tiktok_draft.py
