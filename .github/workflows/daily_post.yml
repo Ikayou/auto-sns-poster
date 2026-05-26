@@ -61,6 +61,19 @@ jobs:
         TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
         TIKTOK_ACCOUNT_NAME: ${{ secrets.TIKTOK_ACCOUNT_NAME }}
       run: |
+        if [ -z "$OPENAI_API_KEY" ]; then
+          echo "OPENAI_API_KEY GitHub secret is missing."
+          exit 1
+        fi
+        if [ -z "$TIKTOK_ACCESS_TOKEN" ]; then
+          echo "TIKTOK_ACCESS_TOKEN GitHub secret is missing."
+          exit 1
+        fi
+        if [ -z "$TIKTOK_ACCOUNT_NAME" ]; then
+          echo "TIKTOK_ACCOUNT_NAME GitHub secret is missing."
+          exit 1
+        fi
+
         python app/create_carousel.py
         python app/slides_to_video.py
         python app/upload_to_tiktok_draft.py

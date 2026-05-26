@@ -268,10 +268,8 @@ faktentreue deutsche Karussell-Texte.
 
 def _get_font_b64() -> str:
     if not FONT_PATH.exists():
-        raise FileNotFoundError(
-            f"フォントが見つかりません: {FONT_PATH}\n"
-            "assets/NotoSansJP-Bold.ttf を配置してください。"
-        )
+        print(f"⚠️  Font file not found, using browser fallback fonts: {FONT_PATH}")
+        return ""
     with open(FONT_PATH, "rb") as f:
         return base64.b64encode(f.read()).decode()
 
