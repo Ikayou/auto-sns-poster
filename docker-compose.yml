@@ -1,0 +1,12 @@
+services:
+  worker:
+    build: .
+    container_name: auto_sns_worker
+    # ホスト側のカレントディレクトリをコンテナの /app にマウント
+    volumes:
+      - .:/app
+    # 環境変数をコンテナに読み込ませる
+    env_file:
+      - .env
+    # 開発用：コンテナが終了しないように待機させ続けるコマンド
+    command: tail -f /dev/null

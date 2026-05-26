@@ -1,0 +1,12 @@
+# 環境変数ファイル（超重要）
+.env
+venv/
+# Pythonのキャッシュファイル
+__pycache__/
+*.pyc
+
+# 生成されたメディアファイルはGit管理から外す
+assets/*
+output/*
+!assets/.gitkeep
+!output/.gitkeep

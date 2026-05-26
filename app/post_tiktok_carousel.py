@@ -1,0 +1,214 @@
+"""
+TikTok フォトカルーセル投稿
+
+フロー:
+  ローカルPNG → GitHub Pages リポジトリに git push
+  → 公開URL取得 → TikTok Content Posting API (PULL_FROM_URL) で投稿
+
+TikTok の仕様:
+  - 写真投稿は PULL_FROM_URL のみ対応（FILE_UPLOAD 非対応）
+  - PULL_FROM_URL は「所有が確認済みのドメイン」のみ使用可能
+  → GitHub Pages (username.github.io) で解決
+
+事前準備（初回のみ）:
+  1. GitHub にリポジトリ作成（例: your-github-username/tiktok-slides）
+  2. Settings → Pages → Source: Deploy from branch(main) を有効化
+  3. .env に設定:
+       GITHUB_SLIDES_DIR   = /path/to/local/tiktok-slides（cloneしたローカルパス）
+       GITHUB_PAGES_BASE_URL = https://your-github-username.github.io/tiktok-slides
+  4. TikTok Developer Portal → あなたのアプリ → URL properties
+     → "https://your-github-username.github.io/tiktok-slides/" を追加・認証
+       認証方法: リポジトリのルートに tiktok-verification.txt を設置
+
+実行:
+  python app/post_tiktok_carousel.py
+"""
+
+import os
+import json
+import time
+import shutil
+import subprocess
+from pathlib import Path
+from dotenv import load_dotenv
+import requests
+
+load_dotenv()
+
+ACCESS_TOKEN     = os.getenv("TIKTOK_ACCESS_TOKEN", "")
+SLIDES_DIR       = os.getenv("GITHUB_SLIDES_DIR", "")       # GitHub Pages リポジトリのローカルパス
+PAGES_BASE_URL   = os.getenv("GITHUB_PAGES_BASE_URL", "")   # https://user.github.io/repo
+BASE_URL         = "https://open.tiktokapis.com/v2"
+PRIVACY_LEVEL    = "SELF_ONLY"   # 本番: PUBLIC_TO_EVERYONE
+
+PAGES_DEPLOY_WAIT = 90   # GitHub Pages デプロイ待機秒数
+
+
+# ---------------------------------------------------------------------------
+# Step 1: GitHub Pages に画像を push して公開 URL を返す
+# ---------------------------------------------------------------------------
+
+def push_to_github_pages(image_paths: list[Path]) -> list[str]:
+    """PNG を GitHub Pages リポジトリに push して公開 URL リストを返す"""
+    if not SLIDES_DIR:
+        raise ValueError(
+            "GITHUB_SLIDES_DIR が .env に設定されていません\n"
+            "GitHub Pages リポジトリをクローンしたローカルパスを設定してください"
+        )
+    if not PAGES_BASE_URL:
+        raise ValueError(
+            "GITHUB_PAGES_BASE_URL が .env に設定されていません\n"
+            "例: https://your-github-username.github.io/tiktok-slides"
+        )
+
+    dest_dir = Path(SLIDES_DIR)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    filenames = []
+    for img_path in image_paths:
+        dest = dest_dir / img_path.name
+        shutil.copy2(img_path, dest)
+        filenames.append(img_path.name)
+        print(f"  📋 {img_path.name} → {dest}")
+
+    # git add / commit / push
+    for cmd in [
+        ["git", "-C", str(dest_dir), "add", "."],
+        ["git", "-C", str(dest_dir), "commit", "-m", "update slides"],
+        ["git", "-C", str(dest_dir), "push"],
+    ]:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            # "nothing to commit" は正常
+            if "nothing to commit" in result.stdout + result.stderr:
+                print(f"  ℹ️  変更なし（既に同じファイル）")
+            else:
+                raise RuntimeError(f"git コマンド失敗: {' '.join(cmd)}\n{result.stderr}")
+
+    print(f"  ✅ GitHub に push しました")
+    print(f"  ⏳ GitHub Pages のデプロイ待機中（{PAGES_DEPLOY_WAIT}秒）...")
+    time.sleep(PAGES_DEPLOY_WAIT)
+
+    base = PAGES_BASE_URL.rstrip("/")
+    urls = [f"{base}/{name}" for name in filenames]
+    print(f"  ✅ 公開URL 生成完了")
+    for url in urls:
+        print(f"     {url}")
+    return urls
+
+
+# ---------------------------------------------------------------------------
+# Step 2: TikTok API で投稿（PULL_FROM_URL）
+# ---------------------------------------------------------------------------
+
+def create_photo_post(photo_urls: list[str], caption: str, hashtags: list[str]) -> str:
+    """TikTok にフォトカルーセルを投稿して publish_id を返す"""
+    full_caption = caption + "\n\n" + " ".join(hashtags)
+
+    payload = {
+        "post_info": {
+            "title":           full_caption[:2200],
+            "privacy_level":   PRIVACY_LEVEL,
+            "disable_comment": False,
+        },
+        "source_info": {
+            "source":            "PULL_FROM_URL",
+            "photo_images":      photo_urls,
+            "photo_cover_index": 0,
+        },
+        "media_type": "PHOTO",
+        "post_mode":  "DIRECT_POST",
+    }
+
+    print(f"   送信ペイロード: {json.dumps(payload, ensure_ascii=False, indent=2)}")
+
+    resp = requests.post(
+        f"{BASE_URL}/post/publish/content/init/",
+        headers={
+            "Authorization": f"Bearer {ACCESS_TOKEN}",
+            "Content-Type":  "application/json; charset=UTF-8",
+        },
+        json=payload,
+        timeout=30,
+    )
+    data = resp.json()
+    print(f"   APIレスポンス [{resp.status_code}]: {data}")
+
+    if resp.status_code != 200 or data.get("error", {}).get("code") != "ok":
+        raise Exception(f"TikTok 投稿エラー: {data}")
+
+    return data["data"]["publish_id"]
+
+
+# ---------------------------------------------------------------------------
+# Step 3: 投稿ステータスを確認
+# ---------------------------------------------------------------------------
+
+def check_publish_status(publish_id: str, timeout_sec: int = 120) -> str:
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        resp = requests.post(
+            f"{BASE_URL}/post/publish/status/fetch/",
+            headers={"Authorization": f"Bearer {ACCESS_TOKEN}"},
+            json={"publish_id": publish_id},
+            timeout=15,
+        )
+        data = resp.json()
+        status = data.get("data", {}).get("status", "PROCESSING")
+        if status in ("PUBLISH_COMPLETE", "FAILED"):
+            return status
+        print(f"   ステータス: {status} ... 10秒後に再確認")
+        time.sleep(10)
+    return "TIMEOUT"
+
+
+# ---------------------------------------------------------------------------
+# メイン関数
+# ---------------------------------------------------------------------------
+
+def post_carousel(image_paths: list[Path], caption: str, hashtags: list[str]) -> str:
+    print(f"🚀 TikTokカルーセル投稿を開始します（{len(image_paths)} 枚）")
+
+    # 1. GitHub Pages に push
+    print("\n📤 [1/3] GitHub Pages に画像を push 中...")
+    photo_urls = push_to_github_pages(image_paths)
+
+    # 2. TikTok に投稿
+    print("\n📋 [2/3] TikTok に投稿中...")
+    publish_id = create_photo_post(photo_urls, caption, hashtags)
+    print(f"   publish_id: {publish_id}")
+
+    # 3. ステータス確認
+    print("\n⏳ [3/3] 投稿ステータスを確認中...")
+    status = check_publish_status(publish_id)
+    print(f"   最終ステータス: {status}")
+
+    if status == "PUBLISH_COMPLETE":
+        print(f"\n🎉 TikTokへの投稿が完了しました！ publish_id: {publish_id}")
+    else:
+        print(f"\n⚠️  ステータス: {status}（TikTokアプリで確認してください）")
+
+    return publish_id
+
+
+# ---------------------------------------------------------------------------
+# 単体実行
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    carousel_dir = Path("output/carousel")
+    image_paths  = sorted(carousel_dir.glob("slide_*.png"))
+
+    if not image_paths:
+        print("❌ output/carousel/ にスライド画像が見つかりません")
+        raise SystemExit(1)
+
+    content_path = Path("assets/carousel_content.json")
+    if not content_path.exists():
+        print("❌ assets/carousel_content.json が見つかりません")
+        raise SystemExit(1)
+
+    with open(content_path, encoding="utf-8") as f:
+        content = json.load(f)
+
+    post_carousel(image_paths, content["caption"], content["hashtags"])
