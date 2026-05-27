@@ -10,20 +10,18 @@ Run:
 
 import json
 import math
-import os
 import time
 from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
+from tiktok_token import get_access_token
 
 load_dotenv()
 
 ROOT_DIR = Path(__file__).parent.parent
 VIDEO_PATH = ROOT_DIR / "output" / "carousel_video.mp4"
 CONTENT_PATH = ROOT_DIR / "assets" / "carousel_content.json"
-
-ACCESS_TOKEN = os.getenv("TIKTOK_ACCESS_TOKEN", "")
 BASE_URL = "https://open.tiktokapis.com/v2"
 
 MIN_CHUNK = 5 * 1024 * 1024
@@ -36,7 +34,7 @@ def _calc_chunk_size(file_size: int) -> int:
     return min(MAX_CHUNK, max(MIN_CHUNK, file_size))
 
 
-def init_draft_upload(video_path: Path) -> dict:
+def init_draft_upload(video_path: Path, access_token: str) -> dict:
     file_size = video_path.stat().st_size
     chunk_size = _calc_chunk_size(file_size)
     total_chunks = math.ceil(file_size / chunk_size)
@@ -46,7 +44,7 @@ def init_draft_upload(video_path: Path) -> dict:
 
     url = f"{BASE_URL}/post/publish/inbox/video/init/"
     headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
+        "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json; charset=UTF-8",
     }
     payload = {
@@ -63,6 +61,12 @@ def init_draft_upload(video_path: Path) -> dict:
     print(f"   init レスポンス [{resp.status_code}]: {data}")
 
     if resp.status_code != 200 or data.get("error", {}).get("code") != "ok":
+        if data.get("error", {}).get("code") == "access_token_invalid":
+            raise RuntimeError(
+                "TikTok access token is invalid. Update the GitHub Secret "
+                "TIKTOK_REFRESH_TOKEN, then let the workflow refresh the "
+                "access token automatically."
+            )
         raise RuntimeError(f"TikTok下書きアップロード初期化エラー: {data}")
 
     return data["data"]
@@ -92,10 +96,10 @@ def upload_video_chunks(upload_url: str, video_path: Path):
             print(f"  ✅ チャンク {i + 1}/{total_chunks} アップロード完了")
 
 
-def check_upload_status(publish_id: str, timeout_sec: int = 180) -> str:
+def check_upload_status(publish_id: str, access_token: str, timeout_sec: int = 180) -> str:
     url = f"{BASE_URL}/post/publish/status/fetch/"
     headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
+        "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json; charset=UTF-8",
     }
 
@@ -124,14 +128,14 @@ def load_suggested_caption() -> str:
 
 
 def upload_to_tiktok_draft(video_path: Path = VIDEO_PATH) -> str:
-    if not ACCESS_TOKEN:
-        raise RuntimeError("TIKTOK_ACCESS_TOKEN が設定されていません")
     if not video_path.exists():
         raise FileNotFoundError(f"動画が見つかりません: {video_path}")
 
+    access_token = get_access_token()
+
     print(f"🚀 TikTok下書き用アップロードを開始します: {video_path.name}")
     print("📋 [1/3] InboxアップロードURLを取得中...")
-    init_data = init_draft_upload(video_path)
+    init_data = init_draft_upload(video_path, access_token)
     publish_id = init_data["publish_id"]
     upload_url = init_data["upload_url"]
     print(f"   publish_id: {publish_id}")
@@ -140,7 +144,7 @@ def upload_to_tiktok_draft(video_path: Path = VIDEO_PATH) -> str:
     upload_video_chunks(upload_url, video_path)
 
     print("⏳ [3/3] TikTokアプリへの通知状態を確認中...")
-    status = check_upload_status(publish_id)
+    status = check_upload_status(publish_id, access_token)
 
     if status == "SEND_TO_USER_INBOX":
         print("✅ TikTokアプリのInboxへ送信されました")

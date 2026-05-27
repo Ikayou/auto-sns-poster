@@ -67,15 +67,25 @@ jobs:
       if: steps.schedule_check.outputs.run_job == 'true'
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+        TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+        TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+        TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
         TIKTOK_ACCOUNT_NAME: ${{ secrets.TIKTOK_ACCOUNT_NAME }}
       run: |
         if [ -z "$OPENAI_API_KEY" ]; then
           echo "OPENAI_API_KEY GitHub secret is missing."
           exit 1
         fi
-        if [ -z "$TIKTOK_ACCESS_TOKEN" ]; then
-          echo "TIKTOK_ACCESS_TOKEN GitHub secret is missing."
+        if [ -z "$TIKTOK_REFRESH_TOKEN" ]; then
+          echo "TIKTOK_REFRESH_TOKEN GitHub secret is missing."
+          exit 1
+        fi
+        if [ -z "$TIKTOK_CLIENT_KEY" ]; then
+          echo "TIKTOK_CLIENT_KEY GitHub secret is missing."
+          exit 1
+        fi
+        if [ -z "$TIKTOK_CLIENT_SECRET" ]; then
+          echo "TIKTOK_CLIENT_SECRET GitHub secret is missing."
           exit 1
         fi
         if [ -z "$TIKTOK_ACCOUNT_NAME" ]; then

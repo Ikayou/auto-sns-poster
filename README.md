@@ -37,8 +37,9 @@ app/
   create_carousel.py          heise.de abrufen, KI-Inhalt erzeugen, PNG-Slides rendern
   slides_to_video.py          PNG-Slides in ein MP4-Video umwandeln
   upload_to_tiktok_draft.py   Video an den TikTok-Inbox-Flow senden
+  tiktok_token.py             access token per refresh token erneuern
   print_tiktok_auth_url.py    TikTok-OAuth-URL ausgeben
-  get_token_direct.py         OAuth-code in access token umwandeln
+  get_token_direct.py         OAuth-code in access/refresh token umwandeln
   check_tiktok_info.py        pruefen, zu welchem TikTok-Konto der token gehoert
 
 templates/
@@ -73,7 +74,8 @@ OPENAI_API_KEY=sk-...
 CLIENT_KEY=...
 CLIENT_SECRET=...
 CODE=...
-TIKTOK_ACCESS_TOKEN=...
+TIKTOK_REFRESH_TOKEN=...
+TIKTOK_ACCESS_TOKEN=...  # optional, nur fuer kurze lokale Tests
 
 TIKTOK_ACCOUNT_NAME=german.news69
 TIKTOK_REDIRECT_URI=https://ikayou.github.io/tiktok-api-legal/
@@ -83,7 +85,7 @@ NEWS_COUNT=5
 SECONDS_PER_SLIDE=8.0
 ```
 
-Wichtig: `TIKTOK_ACCOUNT_NAME` ist nur der Name, der auf den Slides angezeigt wird. An welches TikTok-Konto der Draft wirklich gesendet wird, entscheidet der `TIKTOK_ACCESS_TOKEN`.
+Wichtig: `TIKTOK_ACCOUNT_NAME` ist nur der Name, der auf den Slides angezeigt wird. An welches TikTok-Konto der Draft wirklich gesendet wird, entscheidet der TikTok OAuth token.
 
 ## TikTok-Authentifizierung
 
@@ -104,7 +106,7 @@ python app/print_tiktok_auth_url.py
 python app/get_token_direct.py
 ```
 
-6. Den ausgegebenen access token in `.env` als `TIKTOK_ACCESS_TOKEN=...` speichern.
+6. Den ausgegebenen refresh token in `.env` als `TIKTOK_REFRESH_TOKEN=...` speichern.
 7. Das verknuepfte Konto pruefen:
 
 ```bash
@@ -112,6 +114,8 @@ python app/check_tiktok_info.py
 ```
 
 Wenn `creator_username` `german.news69` ist, landet der Draft beim richtigen Konto.
+
+Der access token laeuft schnell ab. Fuer automatische Laeufe wird deshalb der refresh token gespeichert; der Code erstellt bei jedem Lauf selbst einen frischen access token.
 
 ## Manueller Lauf
 
@@ -136,11 +140,11 @@ Der Workflow liegt hier:
 Zielzeiten in Deutschland:
 
 ```text
-08:30 Europe/Berlin
-17:00 Europe/Berlin
+08:30-09:00 Europe/Berlin
+17:00-17:30 Europe/Berlin
 ```
 
-GitHub Actions verwendet UTC. Deshalb startet der Workflow zu mehreren UTC-Zeiten und prueft im Job selbst, ob die aktuelle Zeit in `Europe/Berlin` wirklich `08:30` oder `17:00` ist. So funktioniert der Zeitplan auch mit Sommerzeit und Winterzeit.
+GitHub Actions verwendet UTC. Deshalb startet der Workflow zu mehreren UTC-Zeiten und prueft im Job selbst, ob die aktuelle Zeit in `Europe/Berlin` im erlaubten Zeitfenster liegt. So funktioniert der Zeitplan auch mit Sommerzeit und Winterzeit.
 
 Manuell kann der Workflow weiterhin ueber `workflow_dispatch` in GitHub Actions gestartet werden.
 
@@ -150,7 +154,9 @@ Diese Secrets muessen im Repository gesetzt sein:
 
 ```text
 OPENAI_API_KEY
-TIKTOK_ACCESS_TOKEN
+TIKTOK_REFRESH_TOKEN
+TIKTOK_CLIENT_KEY
+TIKTOK_CLIENT_SECRET
 TIKTOK_ACCOUNT_NAME
 ```
 

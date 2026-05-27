@@ -1,19 +1,16 @@
 """
 TikTokアカウントの投稿可能な機能を確認する診断スクリプト
 """
-import os
 import requests
-from dotenv import load_dotenv
+from tiktok_token import get_access_token
 
-load_dotenv()
-
-ACCESS_TOKEN = os.getenv("TIKTOK_ACCESS_TOKEN", "")
 BASE_URL     = "https://open.tiktokapis.com/v2"
 
 def check_creator_info():
+    access_token = get_access_token()
     url     = f"{BASE_URL}/post/publish/creator_info/query/"
     headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
+        "Authorization": f"Bearer {access_token}",
         "Content-Type":  "application/json; charset=UTF-8",
     }
     resp = requests.post(url, json={}, headers=headers)

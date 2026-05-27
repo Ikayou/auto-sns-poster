@@ -42,13 +42,18 @@ def exchange_user_token() -> None:
     except ValueError:
         raise SystemExit(f"TikTok token response was not JSON: {response.text}")
 
-    if response.status_code != 200 or "access_token" not in data:
+    if response.status_code != 200 or "access_token" not in data or "refresh_token" not in data:
         raise SystemExit(f"TikTok token error {response.status_code}: {data}")
 
     print("Access token:")
     print(data["access_token"])
     print()
-    print("Paste this value into .env as TIKTOK_ACCESS_TOKEN=...")
+    print("Refresh token:")
+    print(data["refresh_token"])
+    print()
+    print("Paste the refresh token into .env as TIKTOK_REFRESH_TOKEN=...")
+    print("Paste the same refresh token into the GitHub Secret TIKTOK_REFRESH_TOKEN.")
+    print("TIKTOK_ACCESS_TOKEN is optional and only useful for temporary one-off runs.")
     print("Then run: python app/check_tiktok_info.py")
 
 
