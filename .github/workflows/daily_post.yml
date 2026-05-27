@@ -3,7 +3,8 @@ name: Daily TikTok Draft Upload
 on:
   schedule:
     # GitHub Actions cron runs in UTC.
-    # These four UTC times cover 08:30 and 17:00 in Europe/Berlin
+    # These four UTC times cover the start of the Berlin windows
+    # 08:30-09:00 and 17:00-17:30 in Europe/Berlin
     # across both summer time (CEST) and winter time (CET).
     - cron: '30 6 * * *'
     - cron: '30 7 * * *'
@@ -20,11 +21,19 @@ jobs:
       id: schedule_check
       run: |
         berlin_time="$(TZ=Europe/Berlin date +'%H:%M')"
+        berlin_hour="$(TZ=Europe/Berlin date +'%H')"
+        berlin_minute="$(TZ=Europe/Berlin date +'%M')"
+        berlin_minutes=$((10#$berlin_hour * 60 + 10#$berlin_minute))
+        morning_start=$((8 * 60 + 30))
+        morning_end=$((9 * 60))
+        evening_start=$((17 * 60))
+        evening_end=$((17 * 60 + 30))
+
         echo "Berlin time: ${berlin_time}"
 
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           echo "run_job=true" >> "$GITHUB_OUTPUT"
-        elif [ "$berlin_time" = "08:30" ] || [ "$berlin_time" = "17:00" ]; then
+        elif { [ "$berlin_minutes" -ge "$morning_start" ] && [ "$berlin_minutes" -le "$morning_end" ]; } || { [ "$berlin_minutes" -ge "$evening_start" ] && [ "$berlin_minutes" -le "$evening_end" ]; }; then
           echo "run_job=true" >> "$GITHUB_OUTPUT"
         else
           echo "run_job=false" >> "$GITHUB_OUTPUT"
