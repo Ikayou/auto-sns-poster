@@ -1,17 +1,22 @@
 # auto-sns-poster
 
-Dieses Projekt erstellt automatisch TikTok-News-Drafts aus aktuellen heise.de-Meldungen.
+Dieses Projekt erstellt automatisch TikTok-News-Drafts aus aktuellen Meldungen
+deutschsprachiger RSS-Quellen.
 
 Der aktuelle Workflow:
 
-1. Aktuelle Tech-News per heise.de-RSS abrufen
-2. Mit der OpenAI API kurze deutsche News-Texte generieren
-3. Aus HTML-Templates sieben PNG-Slides rendern
-4. Die Slides zu einem MP4-Video zusammenfuegen
-5. Das Video in den TikTok-Inbox-/Bearbeitungsfluss hochladen
-6. Musik und KI-Label manuell in der TikTok-App setzen und posten
+1. Aktuelle Meldungen aus mehreren deutschen RSS-Quellen abrufen
+2. Ein OpenAI-Agent entscheidet zwischen einer Top-5-Digest-Karte und Carousel-Video
+3. Mit der OpenAI API kurze deutsche News-Texte generieren
+4. Ein zweiter OpenAI-Agent prueft Faktennaehe, Sprache, Laenge und Duplikate
+5. Aus HTML-Templates PNG-Slides rendern
+6. Die Slides zu einem MP4-Video zusammenfuegen
+7. Das Video in den TikTok-Inbox-/Bearbeitungsfluss hochladen
+8. Musik und KI-Label manuell in der TikTok-App setzen und posten
 
-Das Projekt veroeffentlicht nicht direkt. Der letzte Schritt passiert bewusst in der TikTok-App.
+Das Projekt veroeffentlicht nicht direkt. Die TikTok API kann die App nicht
+automatisch auf der Bearbeitungsseite oeffnen; sie sendet eine Inbox-
+Benachrichtigung, aus der der Bearbeitungsfluss manuell gestartet wird.
 
 ## Ergebnis
 
@@ -28,13 +33,18 @@ output/carousel/slide_07.png   Outro
 output/carousel_video.mp4      fertiges TikTok-Video
 ```
 
+Wenn der Agent `digest` waehlt, entstehen fuenf News auf einer einzigen Slide
+plus Video. Wenn er `carousel` waehlt, entsteht der gewohnte Ablauf mit Cover,
+fuenf einzelnen News-Slides und Outro.
+
 Alle sichtbaren Texte auf den Bildern sind auf Deutsch.
 
 ## Projektstruktur
 
 ```text
 app/
-  create_carousel.py          heise.de abrufen, KI-Inhalt erzeugen, PNG-Slides rendern
+  agent_runner.py             kompletter Agent-Workflow: RSS, Entscheidung, Slides, Video, Upload
+  create_carousel.py          RSS abrufen, KI-Inhalt erzeugen, PNG-Slides rendern
   slides_to_video.py          PNG-Slides in ein MP4-Video umwandeln
   upload_to_tiktok_draft.py   Video an den TikTok-Inbox-Flow senden
   tiktok_token.py             access token per refresh token erneuern
@@ -44,11 +54,14 @@ app/
 
 templates/
   heise_cover.html            Cover-Template
-  single_news.html            Template fuer einzelne News-Slides
+  news_digest.html            Template fuer fuenf News auf einer Slide
+  single_news.html            Template fuer einzelne News-Slides im Carousel
   heise_outro.html            Outro-Template
 
 assets/
+  agent_plan.json             Entscheidung des Format-Agenten
   carousel_content.json       generierter Inhalt fuer Caption und Slides
+  content_review.json         Ergebnis des Inhalt-Review-Agenten
 
 output/
   carousel/                   generierte PNG-Slides
@@ -83,6 +96,13 @@ TIKTOK_SCOPES=user.info.basic,video.upload,video.publish
 
 NEWS_COUNT=5
 SECONDS_PER_SLIDE=8.0
+AGENT_MODEL=gpt-4o-mini
+REVIEW_AGENT_MODEL=gpt-4o-mini
+UPLOAD_TO_TIKTOK=true
+
+# Optional: RSS-Quellen ueberschreiben
+# Format: Name|URL;Name|URL
+RSS_FEEDS=heise online|https://www.heise.de/newsticker/heise-atom.xml;Golem.de|https://rss.golem.de/rss.php?feed=RSS2.0
 ```
 
 Wichtig: `TIKTOK_ACCOUNT_NAME` ist nur der Name, der auf den Slides angezeigt wird. An welches TikTok-Konto der Draft wirklich gesendet wird, entscheidet der TikTok OAuth token.
@@ -119,12 +139,10 @@ Der access token laeuft schnell ab. Fuer automatische Laeufe wird deshalb der re
 
 ## Manueller Lauf
 
-Einen kompletten lokalen Lauf startest du so:
+Einen kompletten lokalen Lauf mit Agent startest du so:
 
 ```bash
-python app/create_carousel.py
-python app/slides_to_video.py
-python app/upload_to_tiktok_draft.py
+python app/agent_runner.py
 ```
 
 Danach die TikTok-App oeffnen, die Inbox-Benachrichtigung auswaehlen, Musik hinzufuegen, das KI-generiert-Label aktivieren und den Beitrag posten.
@@ -172,6 +190,8 @@ Die lokale `.env` wird von GitHub Actions nicht gelesen. Werte, die im automatis
 
 - Der aktuelle Upload nutzt `FILE_UPLOAD` fuer ein MP4-Video.
 - Es wird kein Foto-Karussell direkt gepostet.
+- Der API-Upload sendet eine Inbox-Benachrichtigung. Die Bearbeitungsseite wird
+  nicht automatisch auf dem Handy geoeffnet.
 - Musik kann nicht per API aus der TikTok-Musikbibliothek ausgewaehlt werden.
 - Das KI-generiert-Label wird manuell in der TikTok-App aktiviert.
 - Wenn Drafts beim falschen Konto ankommen, wurde der token mit dem falschen TikTok-Konto erstellt.
@@ -199,6 +219,12 @@ Slides neu erzeugen:
 
 ```bash
 python app/create_carousel.py
+```
+
+Kompletten Agent-Lauf starten:
+
+```bash
+python app/agent_runner.py
 ```
 
 Video aus Slides erzeugen:

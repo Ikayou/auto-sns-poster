@@ -37,7 +37,7 @@ def create_photo_carousel_draft(photo_urls: list[str], caption: str, hashtags: l
     full_caption = (caption + "\n\n" + " ".join(hashtags)).strip()
     payload = {
         "post_info": {
-            "title": (caption or "heise.de Top 5")[:PHOTO_TITLE_LIMIT],
+            "title": (caption or "News Top 5")[:PHOTO_TITLE_LIMIT],
             "description": full_caption[:PHOTO_DESCRIPTION_LIMIT],
         },
         "source_info": {
@@ -92,9 +92,9 @@ def check_publish_status(publish_id: str, timeout_sec: int = 180) -> str:
 
 def load_content() -> tuple[str, list[str]]:
     if not CONTENT_PATH.exists():
-        return "heise.deの最新テックニュースをまとめました。どれが気になりますか？", [
+        return "最新ニュースをまとめました。どれが気になりますか？", [
             "#テックニュース",
-            "#heise",
+            "#News",
             "#IT",
         ]
 

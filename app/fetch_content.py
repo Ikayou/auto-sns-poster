@@ -1,4 +1,5 @@
 import re
+import os
 from urllib.parse import urljoin
 
 import feedparser
@@ -7,10 +8,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# デフォルトのRSSフィード。
-# TikTok用の題材は heise.de のテックニュースに固定する。
-RSS_FEEDS = [
+# デフォルトのRSSフィード。RSS_FEEDS 環境変数で上書きできる。
+# 形式: "Name|https://example.com/feed.xml;Other|https://example.com/rss"
+DEFAULT_RSS_FEEDS = [
     ("heise online", "https://www.heise.de/newsticker/heise-atom.xml"),
+    ("Golem.de", "https://rss.golem.de/rss.php?feed=RSS2.0"),
+    ("Tagesschau", "https://www.tagesschau.de/index~rss2.xml"),
+    ("DER SPIEGEL", "https://www.spiegel.de/schlagzeilen/tops/index.rss"),
+    ("ZEIT Online", "https://newsfeed.zeit.de/index"),
+    ("Deutsche Welle", "https://rss.dw.com/rdf/rss-de-all"),
 ]
 
 REQUEST_HEADERS = {
@@ -20,6 +26,31 @@ REQUEST_HEADERS = {
         "Chrome/124.0 Safari/537.36"
     )
 }
+
+
+def _parse_rss_feeds(value: str | None) -> list[tuple[str, str]]:
+    if not value:
+        return DEFAULT_RSS_FEEDS
+
+    feeds = []
+    for index, raw_item in enumerate(value.split(";"), start=1):
+        item = raw_item.strip()
+        if not item:
+            continue
+        if "|" in item:
+            name, url = item.split("|", 1)
+            source_name = name.strip() or f"RSS {index}"
+            feed_url = url.strip()
+        else:
+            feed_url = item
+            source_name = re.sub(r"^https?://(www\.)?", "", feed_url).split("/", 1)[0]
+        if feed_url:
+            feeds.append((source_name, feed_url))
+
+    return feeds or DEFAULT_RSS_FEEDS
+
+
+RSS_FEEDS = _parse_rss_feeds(os.getenv("RSS_FEEDS"))
 
 
 def _strip_html(text: str) -> str:

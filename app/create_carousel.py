@@ -1,13 +1,13 @@
 """
-単枚ニュース画像生成パイプライン
+ニュース画像生成パイプライン
 
 実行手順:
   1. RSSから記事を取得
-  2. GPT-4o-miniで1枚画像用コンテンツ(JSON)を生成
+  2. GPT-4o-miniで5件ニュース用コンテンツ(JSON)を生成
   3. 関連画像を記事から取得
   4. HTMLテンプレートに流し込み
-  5. Playwrightで単枚PNG化
-  6. output/carousel/slide_01.png に保存
+  5. PlaywrightでPNG化
+  6. output/carousel/ に保存
 """
 
 import os
@@ -48,71 +48,14 @@ NEWS_COUNT    = int(os.getenv("NEWS_COUNT", "5"))
 # 1. コンテンツ生成
 # ---------------------------------------------------------------------------
 
-def generate_single_news_content(articles: list[dict]) -> dict:
-    """RSS記事一覧を渡してAIに単枚ニュース画像用コンテンツを生成させる"""
-    articles_text = "\n".join(
-        f"[{i}] {a['title']}\n{a['summary']}\n{a['link']}"
-        for i, a in enumerate(articles[:10], start=1)
-    )
-
-    image_candidates = "\n".join(
-        f"[{i}] image_url={a.get('image_url') or '(none)'}"
-        for i, a in enumerate(articles[:10], start=1)
-    )
-
-    prompt = f"""Du bist Tech-News-Redakteur fuer deutschsprachige TikTok-Beitraege.
-Waehle aus den folgenden heise.de-Artikeln genau einen Artikel aus, der sich am besten
-fuer eine einzelne Infografik eignet. Erstelle kurze, klare und faktentreue deutsche Texte.
-
-【Artikel】
-{articles_text}
-
-【Bildkandidaten】
-{image_candidates}
-
-【Regeln】
-- Verwende nur Informationen aus den heise.de-Artikeln oben.
-- Keine unbestaetigten Vorwuerfe, Skandale oder zugespitzten Behauptungen.
-- Alle sichtbaren Texte fuer die Bilder muessen Deutsch sein.
-- title: maximal 42 Zeichen.
-- summary: maximal 110 Zeichen.
-- points: genau 3 Punkte, jeweils maximal 70 Zeichen.
-- selected_index ist die Nummer des ausgewaehlten Artikels.
-- image_url ist die Bild-URL des gewaehlten Artikels, sonst ein leerer String.
-- caption endet mit einer Frage, die Kommentare anregt.
-
-【Ausgabeformat: nur JSON】
-{{
-  "selected_index": 1,
-  "tag": "Tech-News",
-  "title": "Kurze deutsche Headline",
-  "summary": "Kurze deutsche Zusammenfassung",
-  "points": ["Punkt 1", "Punkt 2", "Punkt 3"],
-  "caption": "Deutsche Caption ohne Hashtags",
-  "hashtags": ["#TechNews", "#KI", "#IT", "#heise", "#News"],
-  "image_url": "Bild-URL oder leerer String"
-}}"""
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"},
-    )
-    content = json.loads(response.choices[0].message.content)
-
-    selected_index = int(content.get("selected_index") or 1)
-    selected_index = max(1, min(selected_index, len(articles)))
-    article = articles[selected_index - 1]
-    content["source"] = article.get("source", "heise online")
-    content["article_title"] = article.get("title", "")
-    content["link"] = article.get("link", "")
-    content["image_url"] = content.get("image_url") or article.get("image_url", "")
-    return content
-
-
-def generate_carousel_content(articles: list[dict]) -> dict:
-    """heise.deの記事から複数ニュース画像用のコンテンツを生成する。"""
-    count = max(1, min(NEWS_COUNT, len(articles)))
+def generate_carousel_content(articles: list[dict], news_count: int | None = None) -> dict:
+    """記事一覧から複数ニュース画像用のコンテンツを生成する。"""
+    requested_count = news_count if news_count is not None else NEWS_COUNT
+    try:
+        requested_count = int(requested_count)
+    except (TypeError, ValueError):
+        requested_count = NEWS_COUNT
+    count = max(1, min(requested_count, len(articles)))
     articles_text = "\n".join(
         f"[{i}] {a['title']}\n{a['summary']}\n{a['link']}"
         for i, a in enumerate(articles[:12], start=1)
@@ -123,8 +66,8 @@ def generate_carousel_content(articles: list[dict]) -> dict:
         for i, a in enumerate(articles[:12], start=1)
     )
 
-    prompt = f"""Du bist Tech-News-Redakteur fuer deutschsprachige TikTok-Beitraege.
-Waehle aus den folgenden heise.de-Artikeln {count} unterschiedliche News aus.
+    prompt = f"""Du bist Nachrichtenredakteur fuer deutschsprachige TikTok-Beitraege.
+Waehle aus den folgenden deutschsprachigen Artikeln {count} unterschiedliche News aus.
 Erstelle fuer jede News die Texte fuer genau eine Infografik. Alle sichtbaren Bildtexte
 muessen Deutsch sein.
 
@@ -135,7 +78,7 @@ muessen Deutsch sein.
 {image_candidates}
 
 【Regeln】
-- Verwende nur Informationen aus den heise.de-Artikeln oben.
+- Verwende nur Informationen aus den Artikeln oben.
 - Waehle denselben Artikel nicht mehrfach.
 - Keine unbestaetigten Vorwuerfe, Skandale oder zugespitzten Behauptungen.
 - title: maximal 42 Zeichen.
@@ -144,11 +87,15 @@ muessen Deutsch sein.
 - selected_index ist die Nummer des ausgewaehlten Artikels.
 - image_url ist die Bild-URL des gewaehlten Artikels, sonst ein leerer String.
 - caption stellt die 5 News vor und endet mit einer Kommentarfrage.
+- deck_title: kurze Dachzeile fuer die heutige Nachrichtenauswahl, maximal 24 Zeichen.
+- deck_tag: kurze Kategorie, z.B. "Top 5 Nachrichten".
 
 【Ausgabeformat: nur JSON】
 {{
+  "deck_tag": "Top 5 Nachrichten",
+  "deck_title": "Heute wichtig.",
   "caption": "Deutsche Caption fuer alle 5 News, ohne Hashtags",
-  "hashtags": ["#TechNews", "#KI", "#IT", "#heise", "#News"],
+  "hashtags": ["#News", "#Deutschland", "#TechNews", "#KI", "#Update"],
   "items": [
     {{
       "selected_index": 1,
@@ -182,7 +129,7 @@ muessen Deutsch sein.
         used_indexes.add(selected_index)
 
         article = articles[selected_index - 1]
-        item["source"] = article.get("source", "heise online")
+        item["source"] = article.get("source", "News")
         item["article_title"] = article.get("title", "")
         item["link"] = article.get("link", "")
         item["image_url"] = item.get("image_url") or article.get("image_url", "")
@@ -201,19 +148,21 @@ muessen Deutsch sein.
             "title": article.get("title", "")[:20],
             "summary": article.get("summary", "")[:75],
             "points": [
-                "Aus den aktuellen heise.de-Artikeln ausgewaehlt",
+                "Aus den aktuellen Nachrichten ausgewaehlt",
                 "Details stehen im verlinkten Originalartikel",
                 "Die wichtigste Entwicklung kurz zusammengefasst",
             ],
-            "source": article.get("source", "heise online"),
+            "source": article.get("source", "News"),
             "article_title": article.get("title", ""),
             "link": article.get("link", ""),
             "image_url": article.get("image_url", ""),
         })
 
     content["items"] = enriched_items
-    content.setdefault("caption", "Fuenf aktuelle Tech-News von heise.de. Welche Meldung findest du am spannendsten?")
-    content.setdefault("hashtags", ["#TechNews", "#KI", "#IT", "#heise", "#News"])
+    content.setdefault("deck_tag", "Top 5 Nachrichten")
+    content.setdefault("deck_title", "Heute wichtig.")
+    content.setdefault("caption", "Aktuelle Nachrichten aus deutschsprachigen Quellen. Welche Meldung findest du am spannendsten?")
+    content.setdefault("hashtags", ["#News", "#Deutschland", "#TechNews", "#KI", "#Update"])
     return content
 
 
@@ -225,14 +174,14 @@ def generate_legacy_carousel_content(articles: list[dict]) -> dict:
     )
 
     prompt = f"""Du bist Produzent fuer deutschsprachige TikTok-Karussells.
-Waehle aus den folgenden heise.de-Tech-News ein interessantes Thema aus und erstelle
+Waehle aus den folgenden deutschsprachigen Nachrichten ein interessantes Thema aus und erstelle
 faktentreue deutsche Karussell-Texte.
 
 【Artikel】
 {articles_text}
 
 【Regeln】
-- Verwende nur Informationen aus den heise.de-Artikeln oben.
+- Verwende nur Informationen aus den Artikeln oben.
 - Keine unbestaetigten Vorwuerfe, Skandale oder zugespitzten Behauptungen.
 - Nicht uebertreiben, sondern als nuetzliche Tech-News einordnen.
 - Content-Slides: 4 bis 5.
@@ -318,7 +267,11 @@ def _download_image_as_data_uri(image_url: str) -> str:
 # 3. Playwright で PNG 化
 # ---------------------------------------------------------------------------
 
-async def _render_all(content: dict) -> list[Path]:
+async def _render_all(
+    content: dict,
+    include_cover_outro: bool = True,
+    layout: str = "carousel",
+) -> list[Path]:
     from playwright.async_api import async_playwright
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -340,14 +293,45 @@ async def _render_all(content: dict) -> list[Path]:
             await page.screenshot(path=str(path), full_page=False)
             await page.close()
 
-        cover_html = _render_html("heise_cover.html", {
-            "DATE": date_text,
-            "ACCOUNT_NAME": ACCOUNT_NAME.lstrip("@"),
-        }, font_b64)
-        p = OUTPUT_DIR / "slide_01.png"
-        await screenshot(cover_html, p)
-        paths.append(p)
-        print("  ✅ slide_01.png [表紙]")
+        if layout == "digest":
+            items = (content.get("items") or [])[:5]
+            while len(items) < 5:
+                items.append({
+                    "source": "",
+                    "title": "",
+                    "summary": "",
+                })
+
+            variables = {
+                "DATE": date_text,
+                "TAG": content.get("deck_tag") or content.get("tag", "Top 5 Nachrichten"),
+                "TITLE": content.get("deck_title") or content.get("title", "Heute wichtig."),
+                "ACCOUNT_NAME": ACCOUNT_NAME.lstrip("@"),
+            }
+            for idx, item in enumerate(items, start=1):
+                variables[f"SOURCE_{idx}"] = item.get("source", "News")
+                variables[f"TITLE_{idx}"] = item.get("title", "")
+                variables[f"SUMMARY_{idx}"] = item.get("summary", "")
+
+            digest_html = _render_html("news_digest.html", variables, font_b64)
+            p = OUTPUT_DIR / "slide_01.png"
+            await screenshot(digest_html, p)
+            paths.append(p)
+            print("  ✅ slide_01.png [5 Nachrichten auf einer Karte]")
+            await browser.close()
+            return paths
+
+        slide_number = 1
+        if include_cover_outro:
+            cover_html = _render_html("heise_cover.html", {
+                "DATE": date_text,
+                "ACCOUNT_NAME": ACCOUNT_NAME.lstrip("@"),
+            }, font_b64)
+            p = OUTPUT_DIR / "slide_01.png"
+            await screenshot(cover_html, p)
+            paths.append(p)
+            print("  ✅ slide_01.png [表紙]")
+            slide_number += 1
 
         for idx, item in enumerate(items, start=1):
             points = (item.get("points") or [])[:3]
@@ -355,7 +339,7 @@ async def _render_all(content: dict) -> list[Path]:
                 points.append("")
             image_data_uri = _download_image_as_data_uri(item.get("image_url", ""))
 
-            kicker = item.get("kicker") or item.get("article_title") or item.get("source", "heise online")
+            kicker = item.get("kicker") or item.get("article_title") or item.get("source", "News")
             if len(kicker) > 68:
                 kicker = kicker[:65].rstrip() + "..."
 
@@ -370,32 +354,44 @@ async def _render_all(content: dict) -> list[Path]:
                 "POINT_1": points[0],
                 "POINT_2": points[1],
                 "POINT_3": points[2],
-                "SOURCE": item.get("source", "heise online"),
+                "SOURCE": item.get("source", "News"),
                 "ACCOUNT_NAME": ACCOUNT_NAME.lstrip("@"),
                 "IMAGE_DATA_URI": image_data_uri,
                 "NO_IMAGE_DISPLAY": "none" if image_data_uri else "flex",
             }, font_b64)
-            p = OUTPUT_DIR / f"slide_{idx + 1:02d}.png"
+            p = OUTPUT_DIR / f"slide_{slide_number:02d}.png"
             await screenshot(single_html, p)
             paths.append(p)
-            print(f"  ✅ slide_{idx + 1:02d}.png [{idx}/{news_total} ニュース画像]")
+            print(f"  ✅ slide_{slide_number:02d}.png [{idx}/{news_total} ニュース画像]")
+            slide_number += 1
 
-        outro_html = _render_html("heise_outro.html", {
-            "DATE": date_text,
-            "ACCOUNT_NAME": ACCOUNT_NAME.lstrip("@"),
-        }, font_b64)
-        p = OUTPUT_DIR / f"slide_{news_total + 2:02d}.png"
-        await screenshot(outro_html, p)
-        paths.append(p)
-        print(f"  ✅ slide_{news_total + 2:02d}.png [終了ページ]")
+        if include_cover_outro:
+            outro_html = _render_html("heise_outro.html", {
+                "DATE": date_text,
+                "ACCOUNT_NAME": ACCOUNT_NAME.lstrip("@"),
+            }, font_b64)
+            p = OUTPUT_DIR / f"slide_{slide_number:02d}.png"
+            await screenshot(outro_html, p)
+            paths.append(p)
+            print(f"  ✅ slide_{slide_number:02d}.png [終了ページ]")
 
         await browser.close()
 
     return paths
 
 
-def render_slides(content: dict) -> list[Path]:
-    return asyncio.run(_render_all(content))
+def render_slides(
+    content: dict,
+    include_cover_outro: bool = True,
+    layout: str = "carousel",
+) -> list[Path]:
+    return asyncio.run(
+        _render_all(
+            content,
+            include_cover_outro=include_cover_outro,
+            layout=layout,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,9 +1,14 @@
 import os
-import feedparser
+import sys
+from pathlib import Path
 from openai import OpenAI
 from gtts import gTTS
 from moviepy.editor import *
 from dotenv import load_dotenv
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from app.fetch_content import fetch_articles
 
 # .env から APIキー を読み込む
 load_dotenv()
@@ -12,8 +17,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 def get_top_news():
     """RSSからニュース見出しを3つ取得する"""
     print("🔄 ニュースを取得中...")
-    feed = feedparser.parse("https://www.heise.de/newsticker/heise-atom.xml")
-    return [entry.title for entry in feed.entries[:3]]
+    return [article["title"] for article in fetch_articles(max_per_feed=3)[:3]]
 
 def generate_script(news_titles):
     """OpenAIでTikTok用の30秒台本を作成する"""

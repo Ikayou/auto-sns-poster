@@ -93,6 +93,4 @@ jobs:
           exit 1
         fi
 
-        python app/create_carousel.py
-        python app/slides_to_video.py
-        python app/upload_to_tiktok_draft.py
+        python app/agent_runner.py

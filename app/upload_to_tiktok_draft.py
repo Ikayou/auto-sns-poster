@@ -10,6 +10,7 @@ Run:
 
 import json
 import math
+import os
 import time
 from pathlib import Path
 
@@ -26,6 +27,9 @@ BASE_URL = "https://open.tiktokapis.com/v2"
 
 MIN_CHUNK = 5 * 1024 * 1024
 MAX_CHUNK = 64 * 1024 * 1024
+STATUS_TIMEOUT_SEC = int(os.getenv("TIKTOK_UPLOAD_STATUS_TIMEOUT_SEC", "900"))
+STATUS_POLL_INTERVAL_SEC = int(os.getenv("TIKTOK_UPLOAD_STATUS_POLL_INTERVAL_SEC", "10"))
+UPLOAD_SUCCESS_STATUSES = (200, 201, 206)
 
 
 def _calc_chunk_size(file_size: int) -> int:
@@ -61,11 +65,24 @@ def init_draft_upload(video_path: Path, access_token: str) -> dict:
     print(f"   init レスポンス [{resp.status_code}]: {data}")
 
     if resp.status_code != 200 or data.get("error", {}).get("code") != "ok":
-        if data.get("error", {}).get("code") == "access_token_invalid":
+        error_code = data.get("error", {}).get("code")
+        if error_code == "access_token_invalid":
             raise RuntimeError(
                 "TikTok access token is invalid. Update the GitHub Secret "
                 "TIKTOK_REFRESH_TOKEN, then let the workflow refresh the "
                 "access token automatically."
+            )
+        if error_code == "scope_not_authorized":
+            raise RuntimeError(
+                "TikTok token does not have the video.upload scope. Re-run OAuth "
+                "with TIKTOK_SCOPES including video.upload, then update "
+                "TIKTOK_REFRESH_TOKEN in GitHub Secrets."
+            )
+        if error_code == "spam_risk_too_many_pending_share":
+            raise RuntimeError(
+                "TikTok rejected the upload because too many API uploads are still "
+                "pending in the creator Inbox. Open the TikTok app, handle or clear "
+                "the pending Inbox uploads, then run the workflow again."
             )
         raise RuntimeError(f"TikTok下書きアップロード初期化エラー: {data}")
 
@@ -89,14 +106,23 @@ def upload_video_chunks(upload_url: str, video_path: Path):
                 "Content-Length": str(len(chunk_data)),
             }
             resp = requests.put(upload_url, data=chunk_data, headers=headers, timeout=300)
-            if resp.status_code not in (200, 201, 206):
+            uploaded_range = resp.headers.get("Content-Range")
+            range_note = f", Content-Range: {uploaded_range}" if uploaded_range else ""
+            print(
+                f"  TikTok upload response [{resp.status_code}] "
+                f"chunk {i + 1}/{total_chunks}{range_note}"
+            )
+
+            if resp.status_code not in UPLOAD_SUCCESS_STATUSES:
                 raise RuntimeError(
                     f"チャンク{i + 1}アップロードエラー [{resp.status_code}]: {resp.text}"
                 )
             print(f"  ✅ チャンク {i + 1}/{total_chunks} アップロード完了")
 
 
-def check_upload_status(publish_id: str, access_token: str, timeout_sec: int = 180) -> str:
+def check_upload_status(
+    publish_id: str, access_token: str, timeout_sec: int = STATUS_TIMEOUT_SEC
+) -> dict:
     url = f"{BASE_URL}/post/publish/status/fetch/"
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -104,15 +130,31 @@ def check_upload_status(publish_id: str, access_token: str, timeout_sec: int = 1
     }
 
     deadline = time.time() + timeout_sec
+    last_status_data = {"status": "PROCESSING"}
     while time.time() < deadline:
         resp = requests.post(url, json={"publish_id": publish_id}, headers=headers, timeout=60)
         data = resp.json()
-        status = data.get("data", {}).get("status", "PROCESSING")
-        print(f"   ステータス: {status}")
+        if resp.status_code != 200 or data.get("error", {}).get("code") != "ok":
+            raise RuntimeError(f"TikTokステータス取得エラー [{resp.status_code}]: {data}")
+
+        status_data = data.get("data") or {}
+        status = status_data.get("status", "PROCESSING")
+        last_status_data = status_data
+
+        details = []
+        if "uploaded_bytes" in status_data:
+            details.append(f"uploaded_bytes={status_data['uploaded_bytes']}")
+        if status_data.get("fail_reason"):
+            details.append(f"fail_reason={status_data['fail_reason']}")
+        suffix = f" ({', '.join(details)})" if details else ""
+        print(f"   ステータス: {status}{suffix}")
+
         if status in ("SEND_TO_USER_INBOX", "PUBLISH_COMPLETE", "FAILED"):
-            return status
-        time.sleep(10)
-    return "TIMEOUT"
+            return status_data
+        time.sleep(STATUS_POLL_INTERVAL_SEC)
+
+    last_status_data["status"] = "TIMEOUT"
+    return last_status_data
 
 
 def load_suggested_caption() -> str:
@@ -144,7 +186,8 @@ def upload_to_tiktok_draft(video_path: Path = VIDEO_PATH) -> str:
     upload_video_chunks(upload_url, video_path)
 
     print("⏳ [3/3] TikTokアプリへの通知状態を確認中...")
-    status = check_upload_status(publish_id, access_token)
+    status_data = check_upload_status(publish_id, access_token)
+    status = status_data.get("status", "UNKNOWN")
 
     if status == "SEND_TO_USER_INBOX":
         print("✅ TikTokアプリのInboxへ送信されました")
@@ -157,8 +200,13 @@ def upload_to_tiktok_draft(video_path: Path = VIDEO_PATH) -> str:
         print("音楽を選び、AI生成ラベルをオンにしてから投稿してください。")
     elif status == "PUBLISH_COMPLETE":
         print("✅ TikTok側で投稿完了として扱われています")
+    elif status == "FAILED":
+        raise RuntimeError(f"TikTok下書きアップロードに失敗しました: {status_data}")
     else:
-        print(f"⚠️ ステータス: {status}")
+        raise TimeoutError(
+            "TikTokアプリのInboxへ送信されたことを確認できませんでした。"
+            f"最終ステータス: {status_data}"
+        )
 
     return publish_id
 
