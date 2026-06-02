@@ -124,15 +124,16 @@ Der Workflow fuehrt den Agent-Runner aus:
 python app/agent_runner.py
 ```
 
-Zielzeiten in Deutschland:
+Feste UTC-Zeiten:
 
 ```text
-08:30-09:00 Europe/Berlin
-17:00-17:30 Europe/Berlin
+07:30 UTC
+16:00 UTC
 ```
 
-GitHub Actions laeuft in UTC. Der Job prueft deshalb im Workflow selbst, ob die
-aktuelle Zeit in `Europe/Berlin` im erlaubten Zeitfenster liegt.
+Es gibt keine zusaetzliche Berlin-Zeitpruefung mehr. Jeder geplante Workflow-
+Start fuehrt den Agent-Runner aus. In Deutschland verschieben sich diese Zeiten
+zwischen CET und CEST um eine Stunde.
 
 ## RSS-Quellen
 

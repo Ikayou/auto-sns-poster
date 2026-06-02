@@ -155,14 +155,14 @@ Der Workflow liegt hier:
 .github/workflows/daily_post.yml
 ```
 
-Zielzeiten in Deutschland:
+Feste UTC-Zeiten:
 
 ```text
-08:30-09:00 Europe/Berlin
-17:00-17:30 Europe/Berlin
+07:30 UTC
+16:00 UTC
 ```
 
-GitHub Actions verwendet UTC. Deshalb startet der Workflow zu mehreren UTC-Zeiten und prueft im Job selbst, ob die aktuelle Zeit in `Europe/Berlin` im erlaubten Zeitfenster liegt. So funktioniert der Zeitplan auch mit Sommerzeit und Winterzeit.
+GitHub Actions verwendet UTC. Es gibt keine zusaetzliche Berlin-Zeitpruefung mehr; jeder geplante Workflow-Start fuehrt den Agent-Runner aus. In Deutschland verschieben sich diese Zeiten zwischen CET und CEST um eine Stunde.
 
 Manuell kann der Workflow weiterhin ueber `workflow_dispatch` in GitHub Actions gestartet werden.
 
