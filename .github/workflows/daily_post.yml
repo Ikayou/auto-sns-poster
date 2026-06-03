@@ -48,7 +48,7 @@ jobs:
         INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION }}
         INSTAGRAM_GRAPH_HOST: ${{ vars.INSTAGRAM_GRAPH_HOST }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GITHUB_SLIDES_REPO: ${{ secrets.GITHUB_SLIDES_REPO }}
+        SLIDES_REPO_URL: ${{ secrets.SLIDES_REPO_URL }}
         GITHUB_SLIDES_DIR: ${{ runner.temp }}/auto-sns-slides
         GITHUB_SLIDES_BRANCH: ${{ vars.GITHUB_SLIDES_BRANCH }}
         GITHUB_PAGES_BASE_URL: ${{ vars.GITHUB_PAGES_BASE_URL }}
@@ -83,12 +83,12 @@ jobs:
               echo "INSTAGRAM_USER_ID or INSTAGRAM_BUSINESS_ACCOUNT_ID GitHub secret is missing."
               exit 1
             fi
-            if [ -z "$GITHUB_SLIDES_REPO" ]; then
-              echo "GITHUB_SLIDES_REPO secret is missing."
+            if [ -z "$SLIDES_REPO_URL" ]; then
+              echo "SLIDES_REPO_URL GitHub secret is missing."
               exit 1
             fi
-            if [ -z "$GITHUB_PAGES_BASE_URL" ]; then
-              echo "GITHUB_PAGES_BASE_URL GitHub variable is missing."
+            if [ -z "$PAGES_BASE_URL" ]; then
+              echo "PAGES_BASE_URL GitHub variable is missing."
               exit 1
             fi
             ;;

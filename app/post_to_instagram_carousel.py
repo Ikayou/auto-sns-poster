@@ -22,6 +22,7 @@ from typing import Any
 
 import requests
 from dotenv import load_dotenv
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -31,6 +32,7 @@ load_dotenv()
 
 ROOT_DIR = Path(__file__).parent.parent
 CAROUSEL_DIR = ROOT_DIR / "output" / "carousel"
+INSTAGRAM_IMAGE_DIR = ROOT_DIR / "output" / "instagram_carousel"
 CONTENT_PATH = ROOT_DIR / "assets" / "carousel_content.json"
 
 API_VERSION = os.getenv("INSTAGRAM_API_VERSION") or "v24.0"
@@ -43,6 +45,7 @@ PROCESSING_TIMEOUT_SEC = int(os.getenv("INSTAGRAM_PROCESSING_TIMEOUT_SEC", "900"
 PROCESSING_POLL_INTERVAL_SEC = int(os.getenv("INSTAGRAM_PROCESSING_POLL_INTERVAL_SEC", "10"))
 CAPTION_LIMIT = 2200
 MAX_CAROUSEL_ITEMS = int(os.getenv("INSTAGRAM_MAX_CAROUSEL_ITEMS", "10"))
+JPEG_QUALITY = int(os.getenv("INSTAGRAM_JPEG_QUALITY", "95"))
 
 
 def _require_settings():
@@ -65,6 +68,17 @@ def _decode_json_response(response: requests.Response, action: str) -> dict[str,
         ) from exc
 
     if response.status_code >= 400 or "error" in data:
+        error = data.get("error") or {}
+        if error.get("code") == 100 and error.get("error_subcode") == 33:
+            raise RuntimeError(
+                f"Instagram {action} failed [{response.status_code}]: {data}\n"
+                "Hint: Instagram rejected the account ID for this access token. "
+                "If your token came from Instagram Login, set "
+                "INSTAGRAM_GRAPH_HOST=graph.instagram.com and use the ID returned "
+                "by graph.instagram.com/me. If your token came from Facebook Login, "
+                "use the connected Instagram business account ID and make sure the "
+                "token has content publishing permission."
+            )
         raise RuntimeError(f"Instagram {action} failed [{response.status_code}]: {data}")
 
     return data
@@ -81,6 +95,26 @@ def _full_caption(content: dict[str, Any] | None = None) -> str:
     hashtags = content.get("hashtags") or []
     hashtag_text = " ".join(str(tag).strip() for tag in hashtags if str(tag).strip())
     return (caption + "\n\n" + hashtag_text).strip()[:CAPTION_LIMIT]
+
+
+def prepare_instagram_images(image_paths: list[Path]) -> list[Path]:
+    """Convert rendered PNG slides to JPEGs accepted by Instagram's media API."""
+    INSTAGRAM_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    prepared_paths = []
+
+    for index, source_path in enumerate(image_paths, start=1):
+        dest_path = INSTAGRAM_IMAGE_DIR / f"instagram_slide_{index:02d}.jpg"
+        with Image.open(source_path) as image:
+            image.convert("RGB").save(
+                dest_path,
+                format="JPEG",
+                quality=JPEG_QUALITY,
+                optimize=True,
+            )
+        prepared_paths.append(dest_path)
+        print(f"  🖼️ {source_path.name} → {dest_path.name}")
+
+    return prepared_paths
 
 
 def wait_for_container(container_id: str) -> dict[str, Any]:
@@ -171,10 +205,11 @@ def post_instagram_carousel(
 
     paths = paths[:MAX_CAROUSEL_ITEMS]
     caption = _full_caption(content)
+    instagram_paths = prepare_instagram_images(paths)
 
     print(f"🚀 Instagram画像投稿を開始します（{len(paths)}枚）")
     print("📤 [Instagram 1/4] GitHub Pagesへ画像を公開中...")
-    image_urls = push_to_github_pages(paths)
+    image_urls = push_to_github_pages(instagram_paths)
 
     if len(image_urls) == 1:
         print("📋 [Instagram 2/4] 単独画像コンテナを作成中...")

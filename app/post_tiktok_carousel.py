@@ -29,6 +29,7 @@ import json
 import time
 import shutil
 import subprocess
+from urllib.parse import urlparse
 from pathlib import Path
 from dotenv import load_dotenv
 import requests
@@ -78,20 +79,36 @@ def push_to_github_pages(image_paths: list[Path]) -> list[str]:
             )
         return SLIDES_REPO
 
+    def repo_name(repo_url: str) -> str:
+        parsed = urlparse(repo_url)
+        path = parsed.path.rstrip("/")
+        if path.endswith(".git"):
+            path = path[:-4]
+        return path.split("/")[-1]
+
+    def clone_repo():
+        clone_cmd = ["git", "clone", "--branch", SLIDES_BRANCH, clone_url_with_token(), str(dest_dir)]
+        result = subprocess.run(clone_cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            return
+
+        if "Remote branch" in result.stderr and "not found" in result.stderr:
+            fallback_cmd = ["git", "clone", clone_url_with_token(), str(dest_dir)]
+            fallback = subprocess.run(fallback_cmd, capture_output=True, text=True)
+            if fallback.returncode == 0:
+                return
+            raise RuntimeError(f"git command failed: {' '.join(fallback_cmd)}\n{fallback.stderr}")
+
+        raise RuntimeError(f"git command failed: {' '.join(clone_cmd)}\n{result.stderr}")
+
     if not dest_dir.exists() and SLIDES_REPO:
         dest_dir.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            ["git", "clone", "--branch", SLIDES_BRANCH, clone_url_with_token(), str(dest_dir)],
-            check=True,
-        )
+        clone_repo()
     elif not (dest_dir / ".git").exists() and SLIDES_REPO:
         if any(dest_dir.iterdir()):
             raise RuntimeError(f"GITHUB_SLIDES_DIR is not empty and is not a git repo: {dest_dir}")
         dest_dir.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            ["git", "clone", "--branch", SLIDES_BRANCH, clone_url_with_token(), str(dest_dir)],
-            check=True,
-        )
+        clone_repo()
     else:
         dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -106,11 +123,25 @@ def push_to_github_pages(image_paths: list[Path]) -> list[str]:
             raise RuntimeError(f"git コマンド失敗: {' '.join(cmd)}\n{result.stderr}")
         return result
 
+    if SLIDES_REPO:
+        current_remote = run_git(["remote", "get-url", "origin"]).stdout.strip()
+        if repo_name(current_remote) != repo_name(SLIDES_REPO):
+            raise RuntimeError(
+                "GITHUB_SLIDES_DIR points to a different git repository. "
+                f"dir={dest_dir}, origin={current_remote}, expected={SLIDES_REPO}"
+            )
+
     run_git(["config", "user.name", os.getenv("GIT_COMMITTER_NAME", "github-actions[bot]")])
     run_git(["config", "user.email", os.getenv("GIT_COMMITTER_EMAIL", "github-actions[bot]@users.noreply.github.com")])
+    run_git(["checkout", "-B", SLIDES_BRANCH])
 
     run_git(["pull", "--rebase", "origin", SLIDES_BRANCH],
-            allow_fail_msgs=["There is no tracking information", "no tracking information"])
+            allow_fail_msgs=[
+                "There is no tracking information",
+                "no tracking information",
+                "couldn't find remote ref",
+                "Couldn't find remote ref",
+            ])
 
     filenames = []
     for img_path in image_paths:

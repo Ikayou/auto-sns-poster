@@ -83,6 +83,7 @@ Fuer GitHub Actions werden die gleichen Zugangsdaten als GitHub Secrets benoetig
 ## Lokale .env
 
 Fuer lokale Tests wird eine `.env` im Projektordner verwendet.
+Nutze `.env.example` als Vorlage und kopiere nur deine eigenen Werte in `.env`.
 
 ```env
 OPENAI_API_KEY=sk-...
@@ -221,12 +222,14 @@ TIKTOK_CLIENT_SECRET
 TIKTOK_ACCOUNT_NAME
 INSTAGRAM_ACCESS_TOKEN
 INSTAGRAM_USER_ID
-GITHUB_SLIDES_REPO
+SLIDES_REPO_URL
 ```
 
 Instagram Secrets sind nur erforderlich, wenn `UPLOAD_TO_INSTAGRAM=true` als
 Repository Variable gesetzt ist. `GITHUB_PAGES_BASE_URL` wird als Repository
 Variable benoetigt.
+Der GitHub-Actions-Secret `SLIDES_REPO_URL` wird im Workflow als
+`GITHUB_SLIDES_REPO` an das Python-Skript uebergeben.
 
 `TIKTOK_ACCOUNT_NAME` sollte aktuell so gesetzt sein:
 

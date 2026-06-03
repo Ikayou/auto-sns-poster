@@ -188,11 +188,13 @@ TIKTOK_CLIENT_SECRET
 TIKTOK_ACCOUNT_NAME
 INSTAGRAM_ACCESS_TOKEN
 INSTAGRAM_USER_ID
-GITHUB_SLIDES_REPO
+SLIDES_REPO_URL
 ```
 
 Instagram Secrets sind nur noetig, wenn `UPLOAD_TO_INSTAGRAM=true` gesetzt ist.
 `GITHUB_PAGES_BASE_URL` ist dann als Repository Variable erforderlich.
+Der Secret `SLIDES_REPO_URL` wird im Workflow als `GITHUB_SLIDES_REPO` an die
+Python-Skripte uebergeben.
 
 ## Installation
 
