@@ -12,11 +12,8 @@ load_dotenv()
 # 形式: "Name|https://example.com/feed.xml;Other|https://example.com/rss"
 DEFAULT_RSS_FEEDS = [
     ("heise online", "https://www.heise.de/newsticker/heise-atom.xml"),
-    ("Golem.de", "https://rss.golem.de/rss.php?feed=RSS2.0"),
     ("Tagesschau", "https://www.tagesschau.de/index~rss2.xml"),
-    ("DER SPIEGEL", "https://www.spiegel.de/schlagzeilen/tops/index.rss"),
-    ("ZEIT Online", "https://newsfeed.zeit.de/index"),
-    ("Deutsche Welle", "https://rss.dw.com/rdf/rss-de-all"),
+    
 ]
 
 REQUEST_HEADERS = {

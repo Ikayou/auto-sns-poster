@@ -301,8 +301,10 @@ def run_agent_flow() -> dict:
 
     if UPLOAD_TO_TIKTOK:
         print("🚀 TikTok下書き/編集フローへ送信中...")
-        publish_id = upload_to_tiktok_draft(video_path)
-        plan["publish_id"] = publish_id
+        upload_result = upload_to_tiktok_draft(video_path, return_status=True)
+        plan["publish_id"] = upload_result["publish_id"]
+        plan["tiktok_upload_status"] = upload_result["status"]
+        plan["tiktok_upload_status_data"] = upload_result["status_data"]
         _save_json(AGENT_PLAN_PATH, plan)
     else:
         print("UPLOAD_TO_TIKTOK=false のため、TikTok送信はスキップしました。")

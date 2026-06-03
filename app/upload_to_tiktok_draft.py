@@ -29,7 +29,12 @@ MIN_CHUNK = 5 * 1024 * 1024
 MAX_CHUNK = 64 * 1024 * 1024
 STATUS_TIMEOUT_SEC = int(os.getenv("TIKTOK_UPLOAD_STATUS_TIMEOUT_SEC", "900"))
 STATUS_POLL_INTERVAL_SEC = int(os.getenv("TIKTOK_UPLOAD_STATUS_POLL_INTERVAL_SEC", "10"))
+STATUS_TIMEOUT_IS_ERROR = os.getenv(
+    "TIKTOK_UPLOAD_STATUS_TIMEOUT_IS_ERROR", "false"
+).lower() in ("1", "true", "yes", "on")
 UPLOAD_SUCCESS_STATUSES = (200, 201, 206)
+DELIVERED_STATUSES = ("SEND_TO_USER_INBOX", "PUBLISH_COMPLETE")
+FAILED_STATUS = "FAILED"
 
 
 def _calc_chunk_size(file_size: int) -> int:
@@ -149,7 +154,7 @@ def check_upload_status(
         suffix = f" ({', '.join(details)})" if details else ""
         print(f"   ステータス: {status}{suffix}")
 
-        if status in ("SEND_TO_USER_INBOX", "PUBLISH_COMPLETE", "FAILED"):
+        if status in (*DELIVERED_STATUSES, FAILED_STATUS):
             return status_data
         time.sleep(STATUS_POLL_INTERVAL_SEC)
 
@@ -169,7 +174,9 @@ def load_suggested_caption() -> str:
     return (caption + "\n\n" + hashtags).strip()
 
 
-def upload_to_tiktok_draft(video_path: Path = VIDEO_PATH) -> str:
+def upload_to_tiktok_draft(
+    video_path: Path = VIDEO_PATH, *, return_status: bool = False
+) -> str | dict:
     if not video_path.exists():
         raise FileNotFoundError(f"動画が見つかりません: {video_path}")
 
@@ -200,13 +207,26 @@ def upload_to_tiktok_draft(video_path: Path = VIDEO_PATH) -> str:
         print("音楽を選び、AI生成ラベルをオンにしてから投稿してください。")
     elif status == "PUBLISH_COMPLETE":
         print("✅ TikTok側で投稿完了として扱われています")
-    elif status == "FAILED":
+    elif status == FAILED_STATUS:
         raise RuntimeError(f"TikTok下書きアップロードに失敗しました: {status_data}")
     else:
-        raise TimeoutError(
-            "TikTokアプリのInboxへ送信されたことを確認できませんでした。"
-            f"最終ステータス: {status_data}"
+        message = (
+            "TikTok status polling timed out before inbox delivery was confirmed. "
+            f"publish_id={publish_id}, final_status={status_data}. "
+            "The file upload reached TikTok; open the TikTok app Inbox or check "
+            "this publish_id again later."
         )
+        if STATUS_TIMEOUT_IS_ERROR:
+            raise TimeoutError(message)
+        print(f"WARNING: {message}")
+
+    result = {
+        "publish_id": publish_id,
+        "status": status,
+        "status_data": status_data,
+    }
+    if return_status:
+        return result
 
     return publish_id
 
