@@ -1,8 +1,11 @@
 """
-Compatibility entry point for Instagram carousel posting.
+Backward-compatible entry point.
+
+Instagram posting now uses PNG slides as a carousel instead of publishing the
+generated MP4.
 
 Run:
-  python app/post_to_sns.py
+  python app/post_to_instagram_reel.py
 """
 
 from __future__ import annotations
@@ -15,9 +18,5 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.post_to_instagram_carousel import post_instagram_carousel
 
 
-def main():
-    post_instagram_carousel()
-
-
 if __name__ == "__main__":
-    main()
+    post_instagram_carousel()

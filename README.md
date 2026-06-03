@@ -12,11 +12,13 @@ Der aktuelle Workflow:
 5. Aus HTML-Templates PNG-Slides rendern
 6. Die Slides zu einem MP4-Video zusammenfuegen
 7. Das Video in den TikTok-Inbox-/Bearbeitungsfluss hochladen
-8. Musik und KI-Label manuell in der TikTok-App setzen und posten
+8. Optional die PNG-Slides als Instagram Carousel veroeffentlichen
+9. Musik und KI-Label manuell in der TikTok-App setzen und posten
 
-Das Projekt veroeffentlicht nicht direkt. Die TikTok API kann die App nicht
+Der TikTok-Teil veroeffentlicht nicht direkt. Die TikTok API kann die App nicht
 automatisch auf der Bearbeitungsseite oeffnen; sie sendet eine Inbox-
 Benachrichtigung, aus der der Bearbeitungsfluss manuell gestartet wird.
+Instagram wird nur bei aktivierter Option direkt als Carousel veroeffentlicht.
 
 ## Ergebnis
 
@@ -47,6 +49,7 @@ app/
   create_carousel.py          RSS abrufen, KI-Inhalt erzeugen, PNG-Slides rendern
   slides_to_video.py          PNG-Slides in ein MP4-Video umwandeln
   upload_to_tiktok_draft.py   Video an den TikTok-Inbox-Flow senden
+  post_to_instagram_carousel.py  PNG-Slides als Instagram Carousel veroeffentlichen
   tiktok_token.py             access token per refresh token erneuern
   print_tiktok_auth_url.py    TikTok-OAuth-URL ausgeben
   get_token_direct.py         OAuth-code in access/refresh token umwandeln
@@ -99,6 +102,17 @@ SECONDS_PER_SLIDE=8.0
 AGENT_MODEL=gpt-4o-mini
 REVIEW_AGENT_MODEL=gpt-4o-mini
 UPLOAD_TO_TIKTOK=true
+UPLOAD_TO_INSTAGRAM=false
+
+# Optional: Instagram Carousel Publishing
+INSTAGRAM_ACCESS_TOKEN=...
+INSTAGRAM_USER_ID=...  # alternativ INSTAGRAM_BUSINESS_ACCOUNT_ID
+INSTAGRAM_API_VERSION=v24.0
+INSTAGRAM_GRAPH_HOST=graph.facebook.com
+
+# Fuer Instagram Carousel muessen die PNGs oeffentlich abrufbar sein
+GITHUB_SLIDES_REPO=https://github.com/user/slides-repo.git
+GITHUB_PAGES_BASE_URL=https://user.github.io/slides-repo
 
 # Optional: RSS-Quellen ueberschreiben
 # Format: Name|URL;Name|URL
@@ -147,6 +161,35 @@ python app/agent_runner.py
 
 Danach die TikTok-App oeffnen, die Inbox-Benachrichtigung auswaehlen, Musik hinzufuegen, das KI-generiert-Label aktivieren und den Beitrag posten.
 
+## Instagram-Veröffentlichung
+
+Wenn `UPLOAD_TO_INSTAGRAM=true` gesetzt ist, veroeffentlicht der Agent die
+generierten PNG-Slides als Instagram Carousel. Dafuer werden
+benoetigt:
+
+```env
+INSTAGRAM_ACCESS_TOKEN=...
+INSTAGRAM_USER_ID=...
+UPLOAD_TO_INSTAGRAM=true
+GITHUB_SLIDES_REPO=https://github.com/user/slides-repo.git
+GITHUB_PAGES_BASE_URL=https://user.github.io/slides-repo
+```
+
+`INSTAGRAM_BUSINESS_ACCOUNT_ID` wird als Fallback akzeptiert, wenn
+`INSTAGRAM_USER_ID` nicht gesetzt ist. Instagram Carousel Publishing braucht
+oeffentlich abrufbare Bild-URLs; dafuer wird derselbe GitHub-Pages-Upload
+verwendet wie bei den vorhandenen Foto-Carousel-Skripten. Lokal kann statt
+`GITHUB_SLIDES_REPO` auch ein bereits geklonter Pfad per `GITHUB_SLIDES_DIR`
+gesetzt werden.
+Wenn der Token ueber Instagram Login statt Facebook Login erstellt wurde, kann
+`INSTAGRAM_GRAPH_HOST=graph.instagram.com` gesetzt werden.
+
+Ein einzelner Instagram-Testlauf ohne neuen Agent-Run:
+
+```bash
+python app/post_to_instagram_carousel.py
+```
+
 ## Automatischer Lauf mit GitHub Actions
 
 Der Workflow liegt hier:
@@ -176,7 +219,14 @@ TIKTOK_REFRESH_TOKEN
 TIKTOK_CLIENT_KEY
 TIKTOK_CLIENT_SECRET
 TIKTOK_ACCOUNT_NAME
+INSTAGRAM_ACCESS_TOKEN
+INSTAGRAM_USER_ID
+GITHUB_SLIDES_REPO
 ```
+
+Instagram Secrets sind nur erforderlich, wenn `UPLOAD_TO_INSTAGRAM=true` als
+Repository Variable gesetzt ist. `GITHUB_PAGES_BASE_URL` wird als Repository
+Variable benoetigt.
 
 `TIKTOK_ACCOUNT_NAME` sollte aktuell so gesetzt sein:
 
@@ -189,7 +239,8 @@ Die lokale `.env` wird von GitHub Actions nicht gelesen. Werte, die im automatis
 ## Hinweise zu TikTok
 
 - Der aktuelle Upload nutzt `FILE_UPLOAD` fuer ein MP4-Video.
-- Es wird kein Foto-Karussell direkt gepostet.
+- Instagram wird nur gepostet, wenn `UPLOAD_TO_INSTAGRAM=true` gesetzt ist.
+- TikTok wird weiterhin als Video-Draft gesendet, nicht als Foto-Karussell.
 - Der API-Upload sendet eine Inbox-Benachrichtigung. Die Bearbeitungsseite wird
   nicht automatisch auf dem Handy geoeffnet.
 - Musik kann nicht per API aus der TikTok-Musikbibliothek ausgewaehlt werden.

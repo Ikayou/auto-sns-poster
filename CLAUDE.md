@@ -171,6 +171,11 @@ SECONDS_PER_SLIDE=8.0
 AGENT_MODEL=gpt-4o-mini
 REVIEW_AGENT_MODEL=gpt-4o-mini
 UPLOAD_TO_TIKTOK=true
+UPLOAD_TO_INSTAGRAM=false
+INSTAGRAM_ACCESS_TOKEN=...
+INSTAGRAM_USER_ID=...
+GITHUB_SLIDES_REPO=https://github.com/user/slides-repo.git
+GITHUB_PAGES_BASE_URL=https://user.github.io/slides-repo
 ```
 
 Fuer GitHub Actions muessen die Werte als GitHub Secrets gesetzt werden:
@@ -181,7 +186,13 @@ TIKTOK_REFRESH_TOKEN
 TIKTOK_CLIENT_KEY
 TIKTOK_CLIENT_SECRET
 TIKTOK_ACCOUNT_NAME
+INSTAGRAM_ACCESS_TOKEN
+INSTAGRAM_USER_ID
+GITHUB_SLIDES_REPO
 ```
+
+Instagram Secrets sind nur noetig, wenn `UPLOAD_TO_INSTAGRAM=true` gesetzt ist.
+`GITHUB_PAGES_BASE_URL` ist dann als Repository Variable erforderlich.
 
 ## Installation
 
@@ -193,9 +204,9 @@ playwright install chromium
 ## Hinweise
 
 - Canva wird nicht mehr verwendet.
-- Instagram wird im aktuellen Workflow nicht verwendet.
+- Instagram Carousels werden optional mit `UPLOAD_TO_INSTAGRAM=true` veroeffentlicht.
 - Der aktuelle Upload nutzt `FILE_UPLOAD` fuer ein MP4-Video.
-- Es wird kein Foto-Karussell direkt gepostet.
+- TikTok wird weiterhin als Video-Draft gesendet, nicht als Foto-Karussell.
 - TikTok schickt eine Inbox-Benachrichtigung; die Bearbeitung passiert manuell
   in der TikTok-App.
 - Musik kann nicht per API aus der TikTok-Musikbibliothek ausgewaehlt werden.

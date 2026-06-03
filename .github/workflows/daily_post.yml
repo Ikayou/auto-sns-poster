@@ -1,4 +1,4 @@
-name: Daily TikTok Draft Upload
+name: Daily SNS Upload
 
 on:
   schedule:
@@ -34,13 +34,24 @@ jobs:
         pip install -r requirements.txt
         playwright install chromium
 
-    - name: Create video and send to TikTok draft flow
+    - name: Create video and send to SNS flows
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
         TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
         TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
         TIKTOK_ACCOUNT_NAME: ${{ secrets.TIKTOK_ACCOUNT_NAME }}
+        UPLOAD_TO_INSTAGRAM: ${{ vars.UPLOAD_TO_INSTAGRAM }}
+        INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+        INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+        INSTAGRAM_BUSINESS_ACCOUNT_ID: ${{ secrets.INSTAGRAM_BUSINESS_ACCOUNT_ID }}
+        INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION }}
+        INSTAGRAM_GRAPH_HOST: ${{ vars.INSTAGRAM_GRAPH_HOST }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_SLIDES_REPO: ${{ secrets.GITHUB_SLIDES_REPO }}
+        GITHUB_SLIDES_DIR: ${{ runner.temp }}/auto-sns-slides
+        GITHUB_SLIDES_BRANCH: ${{ vars.GITHUB_SLIDES_BRANCH }}
+        GITHUB_PAGES_BASE_URL: ${{ vars.GITHUB_PAGES_BASE_URL }}
       run: |
         if [ -z "$OPENAI_API_KEY" ]; then
           echo "OPENAI_API_KEY GitHub secret is missing."
@@ -62,5 +73,25 @@ jobs:
           echo "TIKTOK_ACCOUNT_NAME GitHub secret is missing."
           exit 1
         fi
+        case "$UPLOAD_TO_INSTAGRAM" in
+          1|true|TRUE|yes|YES|on|ON)
+            if [ -z "$INSTAGRAM_ACCESS_TOKEN" ]; then
+              echo "INSTAGRAM_ACCESS_TOKEN GitHub secret is missing."
+              exit 1
+            fi
+            if [ -z "$INSTAGRAM_USER_ID" ] && [ -z "$INSTAGRAM_BUSINESS_ACCOUNT_ID" ]; then
+              echo "INSTAGRAM_USER_ID or INSTAGRAM_BUSINESS_ACCOUNT_ID GitHub secret is missing."
+              exit 1
+            fi
+            if [ -z "$GITHUB_SLIDES_REPO" ]; then
+              echo "GITHUB_SLIDES_REPO secret is missing."
+              exit 1
+            fi
+            if [ -z "$GITHUB_PAGES_BASE_URL" ]; then
+              echo "GITHUB_PAGES_BASE_URL GitHub variable is missing."
+              exit 1
+            fi
+            ;;
+        esac
 
         python app/agent_runner.py

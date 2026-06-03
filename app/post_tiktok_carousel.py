@@ -36,7 +36,9 @@ import requests
 load_dotenv()
 
 ACCESS_TOKEN     = os.getenv("TIKTOK_ACCESS_TOKEN", "")
-SLIDES_DIR       = os.getenv("GITHUB_SLIDES_DIR", "")       # GitHub Pages リポジトリのローカルパス
+SLIDES_REPO      = os.getenv("GITHUB_SLIDES_REPO", "")      # GitHub Pages リポジトリURL
+SLIDES_DIR       = os.getenv("GITHUB_SLIDES_DIR", "") or ("/tmp/auto-sns-slides" if SLIDES_REPO else "")
+SLIDES_BRANCH    = os.getenv("GITHUB_SLIDES_BRANCH") or "main"
 PAGES_BASE_URL   = os.getenv("GITHUB_PAGES_BASE_URL", "")   # https://user.github.io/repo
 BASE_URL         = "https://open.tiktokapis.com/v2"
 POST_MODE        = "DIRECT_POST"
@@ -65,7 +67,33 @@ def push_to_github_pages(image_paths: list[Path]) -> list[str]:
         )
 
     dest_dir = Path(SLIDES_DIR)
-    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    def clone_url_with_token() -> str:
+        github_token = os.getenv("GITHUB_TOKEN", "")
+        if github_token and SLIDES_REPO.startswith("https://github.com/"):
+            return SLIDES_REPO.replace(
+                "https://github.com/",
+                f"https://x-access-token:{github_token}@github.com/",
+                1,
+            )
+        return SLIDES_REPO
+
+    if not dest_dir.exists() and SLIDES_REPO:
+        dest_dir.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "clone", "--branch", SLIDES_BRANCH, clone_url_with_token(), str(dest_dir)],
+            check=True,
+        )
+    elif not (dest_dir / ".git").exists() and SLIDES_REPO:
+        if any(dest_dir.iterdir()):
+            raise RuntimeError(f"GITHUB_SLIDES_DIR is not empty and is not a git repo: {dest_dir}")
+        dest_dir.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "clone", "--branch", SLIDES_BRANCH, clone_url_with_token(), str(dest_dir)],
+            check=True,
+        )
+    else:
+        dest_dir.mkdir(parents=True, exist_ok=True)
 
     # git pull → copy images → add → commit → push
     def run_git(args: list[str], allow_fail_msgs: list[str] = []) -> subprocess.CompletedProcess:
@@ -78,7 +106,10 @@ def push_to_github_pages(image_paths: list[Path]) -> list[str]:
             raise RuntimeError(f"git コマンド失敗: {' '.join(cmd)}\n{result.stderr}")
         return result
 
-    run_git(["pull", "--rebase", "origin", "main"],
+    run_git(["config", "user.name", os.getenv("GIT_COMMITTER_NAME", "github-actions[bot]")])
+    run_git(["config", "user.email", os.getenv("GIT_COMMITTER_EMAIL", "github-actions[bot]@users.noreply.github.com")])
+
+    run_git(["pull", "--rebase", "origin", SLIDES_BRANCH],
             allow_fail_msgs=["There is no tracking information", "no tracking information"])
 
     filenames = []
@@ -91,7 +122,7 @@ def push_to_github_pages(image_paths: list[Path]) -> list[str]:
     run_git(["add", "."])
     run_git(["commit", "-m", "update slides"],
             allow_fail_msgs=["nothing to commit"])
-    run_git(["push", "origin", "main"])
+    run_git(["push", "origin", SLIDES_BRANCH])
 
     print(f"  ✅ GitHub に push しました")
     print(f"  ⏳ GitHub Pages のデプロイ待機中（{PAGES_DEPLOY_WAIT}秒）...")

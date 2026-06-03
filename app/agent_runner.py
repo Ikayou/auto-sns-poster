@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.create_carousel import ASSETS_DIR, OUTPUT_DIR, generate_carousel_content, render_slides  # noqa: E402
 from app.fetch_content import RSS_FEEDS, fetch_articles  # noqa: E402
+from app.post_to_instagram_carousel import post_instagram_carousel  # noqa: E402
 from app.slides_to_video import slides_to_video  # noqa: E402
 from app.upload_to_tiktok_draft import upload_to_tiktok_draft  # noqa: E402
 
@@ -36,6 +37,12 @@ try:
 except ValueError:
     DEFAULT_CAROUSEL_COUNT = 5
 UPLOAD_TO_TIKTOK = os.getenv("UPLOAD_TO_TIKTOK", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+UPLOAD_TO_INSTAGRAM = os.getenv("UPLOAD_TO_INSTAGRAM", "false").lower() in (
     "1",
     "true",
     "yes",
@@ -266,8 +273,11 @@ def run_agent_flow() -> dict:
     )
     content.setdefault("deck_tag", "Top 5 Nachrichten")
     content.setdefault("deck_title", "Heute wichtig.")
-    include_cover_outro = plan["mode"] == "carousel"
-    layout = "digest" if plan["mode"] == "digest" else "carousel"
+    include_cover_outro = plan["mode"] == "carousel" or UPLOAD_TO_INSTAGRAM
+    if UPLOAD_TO_INSTAGRAM:
+        layout = "carousel"
+    else:
+        layout = "digest" if plan["mode"] == "digest" else "carousel"
 
     content["agent_plan"] = {
         "mode": plan["mode"],
@@ -308,6 +318,19 @@ def run_agent_flow() -> dict:
         _save_json(AGENT_PLAN_PATH, plan)
     else:
         print("UPLOAD_TO_TIKTOK=false のため、TikTok送信はスキップしました。")
+
+    if UPLOAD_TO_INSTAGRAM:
+        print("🚀 Instagramカルーセルへ公開中...")
+        instagram_result = post_instagram_carousel(png_paths, content)
+        plan["instagram_post_mode"] = instagram_result["mode"]
+        plan["instagram_container_id"] = instagram_result["container_id"]
+        plan["instagram_child_container_ids"] = instagram_result["child_container_ids"]
+        plan["instagram_media_id"] = instagram_result["media_id"]
+        plan["instagram_image_urls"] = instagram_result["image_urls"]
+        plan["instagram_upload_status_data"] = instagram_result["status_data"]
+        _save_json(AGENT_PLAN_PATH, plan)
+    else:
+        print("UPLOAD_TO_INSTAGRAM=false のため、Instagram投稿はスキップしました。")
 
     return {
         "plan": plan,
