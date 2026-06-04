@@ -87,6 +87,7 @@ muessen Deutsch sein.
 - selected_index ist die Nummer des ausgewaehlten Artikels.
 - image_url ist die Bild-URL des gewaehlten Artikels, sonst ein leerer String.
 - caption stellt die 5 News vor und endet mit einer Kommentarfrage.
+- hashtags: genau 5 relevante deutsche Hashtags.
 - deck_title: kurze Dachzeile fuer die heutige Nachrichtenauswahl, maximal 24 Zeichen.
 - deck_tag: kurze Kategorie, z.B. "Top 5 Nachrichten".
 
@@ -162,7 +163,16 @@ muessen Deutsch sein.
     content.setdefault("deck_tag", "Top 5 Nachrichten")
     content.setdefault("deck_title", "Heute wichtig.")
     content.setdefault("caption", "Aktuelle Nachrichten aus deutschsprachigen Quellen. Welche Meldung findest du am spannendsten?")
-    content.setdefault("hashtags", ["#News", "#Deutschland", "#TechNews", "#KI", "#Update"])
+    default_hashtags = ["#News", "#Deutschland", "#TechNews", "#KI", "#Update"]
+    hashtags = content.get("hashtags") or []
+    if len(hashtags) < 5:
+        existing = {t.lower() for t in hashtags}
+        for tag in default_hashtags:
+            if len(hashtags) >= 5:
+                break
+            if tag.lower() not in existing:
+                hashtags.append(tag)
+    content["hashtags"] = hashtags
     return content
 
 

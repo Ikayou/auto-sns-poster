@@ -211,7 +211,7 @@ JSON-Format:
     "deck_tag": "Top 5 Nachrichten",
     "deck_title": "Heute wichtig.",
     "caption": "Korrigierte Caption ohne Hashtags",
-    "hashtags": ["#News", "#Deutschland"],
+    "hashtags": ["#News", "#Deutschland", "#TechNews", "#KI", "#Update"],
     "items": [
       {{
         "tag": "News",
